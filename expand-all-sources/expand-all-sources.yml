@@ -1,0 +1,7 @@
+name: Stash Expand All Sources
+description: Adds a button to expand all plugin package sources
+version: 0.1.0
+url: https://github.com/matthewmorrone/stash-plugins
+ui:
+  javascript:
+    - expand-all-sources.js

@@ -1,0 +1,13 @@
+name: Stash Code Editor
+description: Replaces custom CSS/JS textareas with a fully featured code editor
+version: 0.1.0
+url: https://github.com/matthewmorrone/stash-plugins
+ui:
+  css:
+    - codemirror.min.css
+    - monokai.min.css
+  javascript:
+    - codemirror.min.js
+    - css.min.js
+    - javascript.min.js
+    - code-editor.js

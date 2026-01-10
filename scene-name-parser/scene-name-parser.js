@@ -2,7 +2,7 @@
     'use strict';
 
     let cancelSearch = false; // Flag to cancel ongoing search
-    let MIN_FREQ = 2; // Can be updated from UI
+    let MIN_FREQ = 15; // Can be updated from UI
     let currentDigramCount = 0; // Track current number of digrams
     let storedCounts = null; // Store counts for recalculation
     let allScenes = null; // Cache all scenes
@@ -178,7 +178,6 @@
             });
             
             const data = await response.json();
-            console.log(`StashDB response for "${name}":`, data);
             
             if (data.errors) {
                 console.error(`GraphQL errors for ${name}:`, data.errors);
@@ -197,6 +196,48 @@
         }
     }
 
+    // Check if a performer exists locally by StashDB ID
+    async function checkPerformerExists(stashdbId) {
+        const query = `
+            query FindPerformers($stash_id_endpoint: String!, $stash_id: String!) {
+                findPerformers(
+                    performer_filter: {
+                        stash_id_endpoint: {
+                            endpoint: $stash_id_endpoint
+                            stash_id: $stash_id
+                            modifier: EQUALS
+                        }
+                    }
+                    filter: { per_page: 1 }
+                ) {
+                    count
+                    performers {
+                        id
+                    }
+                }
+            }
+        `;
+        
+        const variables = {
+            stash_id_endpoint: "https://stashdb.org/graphql",
+            stash_id: stashdbId
+        };
+        
+        try {
+            const response = await fetch('/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, variables })
+            });
+            
+            const data = await response.json();
+            return data.data?.findPerformers?.count > 0;
+        } catch (error) {
+            console.error(`Error checking performer existence:`, error);
+            return false;
+        }
+    }
+
     // Main processing function
     async function processSceneNames() {
         const statusDiv = document.getElementById('scene-parser-status');
@@ -205,7 +246,7 @@
         // Read MIN_FREQ from input
         const minFreqInput = document.getElementById('min-freq-input');
         if (minFreqInput) {
-            MIN_FREQ = parseInt(minFreqInput.value) || 2;
+            MIN_FREQ = parseInt(minFreqInput.value) || 15;
         }
         
         if (!storedCounts) {
@@ -304,6 +345,15 @@
                     return false;
                 }) : [];
                 
+                // Check if each exact match exists locally
+                for (let match of exactMatches) {
+                    if (match.remote_site_id) {
+                        match.existsLocally = await checkPerformerExists(match.remote_site_id);
+                    } else {
+                        match.existsLocally = false;
+                    }
+                }
+                
                 results.push({
                     name,
                     frequency: freq,
@@ -341,37 +391,40 @@
         
         let html = '<div class="row">';
         
-        // Each result gets its own grouped card
+        // Each result gets its own grouped card (only show results with matches)
         results.forEach((result, index) => {
+            // Skip results with no matches
+            if (result.matches.length === 0) return;
+            
             html += `
                 <div class="col-md-6 mb-3">
                     <div class="card">
                         <div class="card-body" style="padding: 1rem;">
                             <h5 class="card-title" style="margin-bottom: 0.75rem;">${result.name}</h5>
-                            <input type="text" class="form-control form-control-sm mb-2" value="${result.name}" readonly style="background-color: #1f1f1f; border-color: #404040;">
             `;
             
-            if (result.matches.length > 0) {
-                result.matches.forEach(match => {
-                    const name = match.name || 'Unknown';
-                    const disambiguation = match.disambiguation || '';
-                    const aliases = Array.isArray(match.aliases) ? match.aliases.join(', ') : '';
-                    const imageUrl = Array.isArray(match.images) && match.images.length > 0 ? match.images[0] : '';
-                    
-                    html += `
-                        <div class="d-flex align-items-start mb-2 p-2" style="border: 1px solid #404040; border-radius: 4px; background-color: #2a2a2a;">
-                            ${imageUrl ? `<img src="${imageUrl}" style="width: 60px; height: 60px; object-fit: cover; margin-right: 10px; border-radius: 4px; flex-shrink: 0;" alt="${name}">` : '<div style="width: 60px; height: 60px; background: #1a1a1a; margin-right: 10px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;"><span style="color: #666; font-size: 0.7rem;">No Image</span></div>'}
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="font-weight: 600; margin-bottom: 0.25rem;">${name}</div>
-                                ${disambiguation ? `<div style="font-size: 0.85rem; color: #999; margin-bottom: 0.25rem;">${disambiguation}</div>` : ''}
-                                ${aliases ? `<div style="font-size: 0.85rem; color: #999;">Aliases: ${aliases}</div>` : ''}
-                            </div>
+            result.matches.forEach(match => {
+                const name = match.name || 'Unknown';
+                const disambiguation = match.disambiguation || '';
+                const aliases = Array.isArray(match.aliases) ? match.aliases.join(', ') : '';
+                const imageUrl = Array.isArray(match.images) && match.images.length > 0 ? match.images[0] : '';
+                const existsLocally = match.existsLocally || false;
+                const stashdbId = match.remote_site_id || '';
+                
+                html += `
+                    <div class="d-flex align-items-start mb-2 p-2 performer-card" data-stashdb-id="${stashdbId}" style="border: 1px solid #404040; border-radius: 4px; background-color: #2a2a2a; cursor: pointer; transition: background-color 0.2s;">
+                        <div style="position: relative; flex-shrink: 0;">
+                            ${imageUrl ? `<img src="${imageUrl}" style="width: 60px; height: 60px; object-fit: cover; margin-right: 10px; border-radius: 4px;" alt="${name}">` : '<div style="width: 60px; height: 60px; background: #1a1a1a; margin-right: 10px; border-radius: 4px; display: flex; align-items: center; justify-content: center;"><span style="color: #666; font-size: 0.7rem;">No Image</span></div>'}
+                            ${existsLocally ? '<span style="position: absolute; bottom: 2px; left: 2px; font-size: 0.65rem; background-color: #28a745; color: white; padding: 2px 5px; border-radius: 3px; font-weight: 600; line-height: 1;">✓</span>' : ''}
                         </div>
-                    `;
-                });
-            } else {
-                html += `<div class="text-muted" style="font-style: italic; padding: 0.5rem 0;">No results found</div>`;
-            }
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; margin-bottom: 0.25rem;">${name}</div>
+                            ${disambiguation ? `<div style="font-size: 0.85rem; color: #999; margin-bottom: 0.25rem;">${disambiguation}</div>` : ''}
+                            ${aliases ? `<div style="font-size: 0.85rem; color: #999;">Aliases: ${aliases}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
             
             html += `
                         </div>
@@ -383,6 +436,171 @@
         html += '</div>';
         
         statusDiv.innerHTML += html;
+        
+        // Add click handlers and hover effects
+        const performerCards = statusDiv.querySelectorAll('.performer-card');
+        performerCards.forEach(card => {
+            // Hover effect
+            card.addEventListener('mouseenter', () => {
+                card.style.backgroundColor = '#353535';
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.backgroundColor = '#2a2a2a';
+            });
+            
+            // Click handler
+            card.addEventListener('click', async () => {
+                const stashdbId = card.dataset.stashdbId;
+                if (stashdbId) {
+                    // Get the full performer data from the results
+                    let performerData = null;
+                    results.forEach(result => {
+                        const match = result.matches.find(m => m.remote_site_id === stashdbId);
+                        if (match) performerData = match;
+                    });
+                    
+                    if (performerData) {
+                        openPerformerModal(performerData);
+                    }
+                }
+            });
+        });
+    }
+    
+    // Open modal to create performer
+    function openPerformerModal(performerData) {
+        const existingModal = document.getElementById('performer-create-modal');
+        if (existingModal) existingModal.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'performer-create-modal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;';
+        
+        const imageUrl = Array.isArray(performerData.images) && performerData.images.length > 0 ? performerData.images[0] : '';
+        const aliases = Array.isArray(performerData.aliases) ? performerData.aliases.join(', ') : (performerData.aliases || '');
+        
+        modal.innerHTML = `
+            <div style="background: #1a1a1a; border-radius: 8px; padding: 2rem; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+                <h3 style="margin-top: 0;">Create Performer from StashDB</h3>
+                
+                ${imageUrl ? `<div style="text-align: center; margin-bottom: 1rem;"><img src="${imageUrl}" style="max-width: 200px; max-height: 300px; border-radius: 4px;"></div>` : ''}
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Name</label>
+                    <div style="padding: 0.5rem; background: #2a2a2a; border-radius: 4px;">${performerData.name}</div>
+                </div>
+                
+                ${performerData.disambiguation ? `
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Disambiguation</label>
+                    <div style="padding: 0.5rem; background: #2a2a2a; border-radius: 4px;">${performerData.disambiguation}</div>
+                </div>
+                ` : ''}
+                
+                ${aliases ? `
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Aliases</label>
+                    <div style="padding: 0.5rem; background: #2a2a2a; border-radius: 4px;">${aliases}</div>
+                </div>
+                ` : ''}
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">StashDB ID</label>
+                    <div style="padding: 0.5rem; background: #2a2a2a; border-radius: 4px; font-family: monospace; font-size: 0.9rem;">${performerData.remote_site_id}</div>
+                </div>
+                
+                <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                    <button id="create-performer-btn" class="btn btn-primary" style="flex: 1;">Create Performer</button>
+                    <button id="cancel-performer-btn" class="btn btn-secondary" style="flex: 1;">Cancel</button>
+                </div>
+                
+                <div id="create-status" style="margin-top: 1rem;"></div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        document.getElementById('cancel-performer-btn').addEventListener('click', () => {
+            modal.remove();
+        });
+        
+        document.getElementById('create-performer-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('create-performer-btn');
+            const statusDiv = document.getElementById('create-status');
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+            
+            try {
+                const result = await createPerformerFromStashDB(performerData);
+                if (result.success) {
+                    statusDiv.innerHTML = '<div class="alert alert-success">Performer created successfully!</div>';
+                    setTimeout(() => modal.remove(), 1500);
+                } else {
+                    statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${result.error}</div>`;
+                    btn.disabled = false;
+                    btn.textContent = 'Create Performer';
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                btn.disabled = false;
+                btn.textContent = 'Create Performer';
+            }
+        });
+        
+        // Close on background click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    }
+    
+    // Create performer from StashDB data
+    async function createPerformerFromStashDB(performerData) {
+        const mutation = `
+            mutation PerformerCreate($input: PerformerCreateInput!) {
+                performerCreate(input: $input) {
+                    id
+                    name
+                }
+            }
+        `;
+        
+        const input = {
+            name: performerData.name,
+            disambiguation: performerData.disambiguation || null,
+            alias_list: Array.isArray(performerData.aliases) ? performerData.aliases : (performerData.aliases ? [performerData.aliases] : []),
+            stash_ids: [{
+                endpoint: "https://stashdb.org/graphql",
+                stash_id: performerData.remote_site_id
+            }]
+        };
+        
+        // Add image if available
+        if (performerData.images && performerData.images.length > 0) {
+            input.image = performerData.images[0];
+        }
+        
+        try {
+            const response = await fetch('/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    query: mutation, 
+                    variables: { input }
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.errors) {
+                return { success: false, error: data.errors[0].message };
+            }
+            
+            return { success: true, performer: data.data.performerCreate };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
     }
 
     // Display parsing results before StashDB search
@@ -551,7 +769,7 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <label for="min-freq-input" style="margin: 0; font-size: 0.9rem; white-space: nowrap;">Min occurrences:</label>
-                        <input type="number" id="min-freq-input" class="form-control form-control-sm" value="2" min="1" style="width: 70px;">
+                        <input type="number" id="min-freq-input" class="form-control form-control-sm" value="15" min="1" style="width: 70px;">
                     </div>
                 </div>
                 <div class="setting">

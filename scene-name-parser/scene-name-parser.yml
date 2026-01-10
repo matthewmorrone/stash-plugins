@@ -1,0 +1,7 @@
+name: Scene Name Parser
+description: Extracts performer names from scene titles and searches StashDB
+version: 0.1.0
+url: https://github.com/matthewmorrone
+ui:
+  javascript:
+    - scene-name-parser.js

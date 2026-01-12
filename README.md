@@ -12,3 +12,6 @@ Adds a button to expand all plugin package sources on the settings page.
 
 ### Code Editor
 Replaces custom CSS/JS textareas with a fully featured CodeMirror editor with syntax highlighting.
+
+### Scroll Restore
+Restores scroll position on refresh (useful on long settings pages).

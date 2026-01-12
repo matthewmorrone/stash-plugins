@@ -1,0 +1,7 @@
+name: Stash Scroll Restore
+description: Restores scroll position on refresh (useful on long settings pages)
+version: 0.1.0
+url: https://github.com/matthewmorrone/stash-plugins
+ui:
+  javascript:
+    - scroll-restore.js

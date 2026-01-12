@@ -1,16 +1,48 @@
 (function() {
     const BUTTON_ID = "expand-all-sources-btn";
+    const LABEL_EXPAND = "Expand All Sources";
+    const LABEL_COLLAPSE = "Collapse All Sources";
     let injected = false;
 
+    function getChevronState(buttonEl) {
+        // FontAwesome in Stash typically renders as an <svg> with classes like:
+        // "svg-inline--fa fa-chevron-right" or "svg-inline--fa fa-chevron-down"
+        const svg = buttonEl.querySelector("svg");
+        if (svg) {
+            const cls = (svg.getAttribute("class") || "").toLowerCase();
+            if (cls.includes("fa-chevron-down")) return "expanded";
+            if (cls.includes("fa-chevron-right")) return "collapsed";
+        }
+
+        // Fallback in case FA is rendered as <i class="fa ...">.
+        const icon = buttonEl.querySelector("i");
+        if (icon) {
+            const cls = (icon.getAttribute("class") || "").toLowerCase();
+            if (cls.includes("fa-chevron-down")) return "expanded";
+            if (cls.includes("fa-chevron-right")) return "collapsed";
+        }
+
+        return null;
+    }
+
+    function isExpanded(buttonEl) {
+        const chevronState = getChevronState(buttonEl);
+        if (chevronState === "expanded") return true;
+        if (chevronState === "collapsed") return false;
+
+        // Last-resort fallback (some UIs use this), but we strongly prefer chevron detection.
+        const aria = buttonEl.getAttribute("aria-expanded");
+        if (aria === "true") return true;
+        if (aria === "false") return false;
+
+        return false;
+    }
+
     function areAllExpanded() {
-        const buttons = document.querySelectorAll(".source-collapse button");
+        const buttons = Array.from(document.querySelectorAll(".source-collapse button"));
         if (buttons.length === 0) return false;
-        
-        // Check if buttons have aria-expanded attribute or if the content is visible
-        return Array.from(buttons).every(btn => {
-            const expanded = btn.getAttribute("aria-expanded");
-            return expanded === "true";
-        });
+
+        return buttons.every(isExpanded);
     }
 
     function toggleAllSources() {
@@ -18,25 +50,23 @@
         const buttons = document.querySelectorAll(".source-collapse button");
         
         buttons.forEach(btn => {
-            const isExpanded = btn.getAttribute("aria-expanded") === "true";
+            const expanded = isExpanded(btn);
             
             // Only click if state needs to change
-            if (allExpanded && isExpanded) {
+            if (allExpanded && expanded) {
                 btn.click(); // Collapse
-            } else if (!allExpanded && !isExpanded) {
+            } else if (!allExpanded && !expanded) {
                 btn.click(); // Expand
             }
         });
-        
-        updateButtonText();
-    }
 
-    function updateButtonText() {
+        // Blindly flip label based on what action we just took.
+        // If everything was expanded, we just collapsed -> show expand label.
+        // Otherwise we just expanded -> show collapse label.
         const btn = document.getElementById(BUTTON_ID);
-        if (!btn) return;
-        
-        const allExpanded = areAllExpanded();
-        btn.textContent = allExpanded ? "Collapse All Sources" : "Expand All Sources";
+        if (btn) {
+            btn.textContent = allExpanded ? LABEL_EXPAND : LABEL_COLLAPSE;
+        }
     }
 
     function addButton() {
@@ -51,7 +81,7 @@
 
         const btn = document.createElement("button");
         btn.id = BUTTON_ID;
-        btn.textContent = "Expand All Sources";
+        btn.textContent = LABEL_EXPAND;
         btn.className = "btn btn-primary ml-3";
         btn.style.cursor = "pointer";
 
@@ -59,9 +89,6 @@
 
         inputGroup.insertAdjacentElement("afterend", btn);
         injected = true;
-        
-        // Set initial button text
-        setTimeout(updateButtonText, 100);
     }
 
     // Try a few times then stop

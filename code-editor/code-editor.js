@@ -3,6 +3,109 @@
     let debounceTimer;
     let isProcessing = false;
     let initCount = 0;
+    const editorsByTextarea = new WeakMap();
+
+    function setNativeTextareaValue(textarea, value) {
+        const proto = Object.getPrototypeOf(textarea);
+        const desc = Object.getOwnPropertyDescriptor(proto, 'value') ||
+            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+        const setter = desc && desc.set;
+        if (setter) {
+            setter.call(textarea, value);
+        } else {
+            textarea.value = value;
+        }
+    }
+
+    function fireInputAndChange(textarea) {
+        // Some frameworks listen to input, some to change.
+        try {
+            textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        } catch {
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function ensurePrettyStyles() {
+        const styleId = "stash-code-editor-pretty";
+        if (document.getElementById(styleId)) return;
+
+        const style = document.createElement("style");
+        style.id = styleId;
+        style.textContent = `
+            .CodeMirror {
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+                font-size: 12px;
+                line-height: 1.45;
+                border: 1px solid rgba(127, 127, 127, 0.25);
+                border-radius: 6px;
+                height: 260px;
+            }
+            .CodeMirror-scroll { padding: 8px 0; }
+            .CodeMirror-lines { padding: 0 8px; }
+            .CodeMirror-gutters {
+                border-right: 1px solid rgba(127, 127, 127, 0.25);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function inferMode(textarea) {
+        function modeFromHints(hintsText) {
+            const t = (hintsText || '').toLowerCase();
+            if (!t) return null;
+            if (t.includes('custom css') || t.includes(' css ')) return 'text/css';
+            if (t.includes('custom javascript') || t.includes('javascript') || t.includes(' custom js') || t.includes(' js ')) {
+                return 'text/javascript';
+            }
+            return null;
+        }
+
+        function collectHintsText() {
+            const parts = [];
+
+            const label = textarea.closest('.form-group, .setting-group, div')?.querySelector('label');
+            if (label?.textContent) parts.push(label.textContent);
+
+            if (textarea.id) parts.push(textarea.id);
+            if (textarea.name) parts.push(textarea.name);
+            if (textarea.getAttribute('aria-label')) parts.push(textarea.getAttribute('aria-label'));
+            if (textarea.getAttribute('placeholder')) parts.push(textarea.getAttribute('placeholder'));
+
+            const dialog = textarea.closest('[role="dialog"], .modal, .dialog, .ui-dialog');
+            if (dialog) {
+                const titleEl = dialog.querySelector('.modal-title, .modal-header, .dialog-title, header, h1, h2, h3, h4, h5');
+                if (titleEl?.textContent) parts.push(titleEl.textContent);
+            }
+
+            // Sometimes the title is outside the immediate dialog subtree.
+            const maybeTitle = textarea.closest('section, article, div')?.querySelector('h1, h2, h3, h4, h5');
+            if (maybeTitle?.textContent) parts.push(maybeTitle.textContent);
+
+            return parts.join(' | ');
+        }
+
+        // 1) Strong hint-based detection
+        const hinted = modeFromHints(collectHintsText());
+        if (hinted) return hinted;
+
+        // 2) Content heuristics (helps when there is no label/title next to the textarea)
+        const value = (textarea.value || '').toLowerCase();
+        const cssScore =
+            (/{[^}]*:[^;]+;/.test(value) ? 2 : 0) +
+            (/!important\b/.test(value) ? 1 : 0) +
+            (/\b(max-|min-)?(width|height)\b\s*:\s*/.test(value) ? 1 : 0);
+        const jsScore =
+            (/\b(function|const|let|var|return|import|export)\b/.test(value) ? 2 : 0) +
+            (/=>/.test(value) ? 1 : 0) +
+            (/\bconsole\./.test(value) ? 1 : 0);
+
+        if (cssScore > jsScore) return 'text/css';
+
+        // Default
+        return 'text/javascript';
+    }
 
     function initCodeEditor(textarea) {
         // console.log('[CodeEditor] initCodeEditor called for textarea:', textarea);
@@ -13,26 +116,33 @@
         }
         
         if (textarea.dataset.codeMirrorInit) {
-            // console.log('[CodeEditor] Textarea already initialized, skipping');
-            return;
+            // If the modal was destroyed/rebuilt, the textarea may remain but the
+            // CodeMirror wrapper can disappear. In that case, re-init.
+            const existing = editorsByTextarea.get(textarea);
+            const wrapper = existing?.getWrapperElement?.();
+            if (existing && wrapper && document.contains(wrapper)) {
+                return;
+            }
+            delete textarea.dataset.codeMirrorInit;
+            editorsByTextarea.delete(textarea);
         }
 
-        let mode = 'javascript';
-        const label = textarea.closest('.form-group, .setting-group, div')?.querySelector('label');
-        const labelText = label?.textContent || 'no label';
-        
-        // console.log('[CodeEditor] Label text:', labelText);
-        
-        if (labelText.toLowerCase().includes('css')) {
-            mode = 'css';
-        }
-        
-        // console.log('[CodeEditor] Using mode:', mode);
+        ensurePrettyStyles();
+        const mode = inferMode(textarea);
 
         try {
+            const extraKeys = {};
+            if (window.CodeMirror?.commands?.autocomplete) {
+                extraKeys["Ctrl-Space"] = "autocomplete";
+            }
+            if (window.CodeMirror?.commands?.toggleComment) {
+                extraKeys["Cmd-/"] = "toggleComment";
+                extraKeys["Ctrl-/"] = "toggleComment";
+            }
+
             const editor = CodeMirror.fromTextArea(textarea, {
                 mode: mode,
-                theme: 'default',
+                theme: 'monokai',
                 lineNumbers: true,
                 lineWrapping: true,
                 indentUnit: 2,
@@ -40,22 +150,73 @@
                 indentWithTabs: false,
                 autoCloseBrackets: true,
                 matchBrackets: true,
-                extraKeys: {
-                    "Ctrl-Space": "autocomplete",
-                    "Cmd-/": "toggleComment",
-                    "Ctrl-/": "toggleComment"
-                }
+                extraKeys: extraKeys
             });
 
-            editor.on('change', () => {
-                textarea.value = editor.getValue();
-                textarea.dispatchEvent(new Event('change', { bubbles: true }));
+            editorsByTextarea.set(textarea, editor);
+
+            function syncToTextarea() {
+                const value = editor.getValue();
+                setNativeTextareaValue(textarea, value);
+                fireInputAndChange(textarea);
+            }
+
+            // Many UIs listen to `input` rather than `change` for persistence.
+            editor.on('change', syncToTextarea);
+            editor.on('blur', syncToTextarea);
+
+            // Re-check mode on focus in case the surrounding UI (dialog title/tab) changes.
+            editor.on('focus', () => {
+                const inferred = inferMode(textarea);
+                if (inferred && editor.getOption('mode') !== inferred) {
+                    editor.setOption('mode', inferred);
+                    editor.refresh();
+                }
             });
 
             textarea.dataset.codeMirrorInit = 'true';
             
             // Immediate refresh instead of delayed
             editor.refresh();
+
+            // Ensure the intended height applies even if surrounding layout changes.
+            editor.setSize(null, 260);
+
+            // If there's an explicit confirm/apply button in a modal, make sure we sync
+            // right before it reads/saves the value.
+            const dialog = textarea.closest('[role="dialog"], .modal, .dialog, .ui-dialog');
+            if (dialog && !dialog.dataset.codeMirrorSyncBound) {
+                dialog.dataset.codeMirrorSyncBound = 'true';
+
+                // Sync on modal close as well (covers "X" close and backdrop).
+                const syncAllInDialog = () => {
+                    dialog.querySelectorAll('textarea[data-code-mirror-init="true"]').forEach((ta) => {
+                        const ed = editorsByTextarea.get(ta);
+                        if (ed) {
+                            try {
+                                const val = ed.getValue();
+                                setNativeTextareaValue(ta, val);
+                                fireInputAndChange(ta);
+                            } catch {}
+                        }
+                    });
+                };
+
+                dialog.addEventListener('hide.bs.modal', syncAllInDialog, true);
+                dialog.addEventListener('hidden.bs.modal', syncAllInDialog, true);
+                dialog.addEventListener('close', syncAllInDialog, true);
+
+                dialog.addEventListener('click', (e) => {
+                    const el = e.target;
+                    if (!(el instanceof Element)) return;
+                    const isConfirm =
+                        el.matches('button.btn-primary, button[type="submit"]') ||
+                        (el.textContent || '').trim().toLowerCase() === 'confirm';
+                    if (isConfirm) {
+                        syncAllInDialog();
+                    }
+                }, true);
+            }
             
             initCount++;
             // console.log('[CodeEditor] Successfully initialized editor #' + initCount);

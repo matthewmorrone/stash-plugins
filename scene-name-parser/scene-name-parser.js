@@ -452,7 +452,6 @@
             card.addEventListener('click', async () => {
                 const stashdbId = card.dataset.stashdbId;
                 if (stashdbId) {
-                    // Get the full performer data from the results
                     let performerData = null;
                     results.forEach(result => {
                         const match = result.matches.find(m => m.remote_site_id === stashdbId);

@@ -11,13 +11,13 @@
 
     // Calculate and cache digrams from scenes
     async function calculateDigrams() {
-        console.log('Calculating digrams...');
+        // console.log('Calculating digrams...');
         
         if (!allScenes) {
             const statusMsg = document.getElementById('digram-status-msg');
             if (statusMsg) statusMsg.textContent = 'Loading scenes...';
             allScenes = await getAllScenes();
-            console.log('Loaded', allScenes.length, 'scenes');
+            // console.log('Loaded', allScenes.length, 'scenes');
         }
         
         const counts = countNames(allScenes);
@@ -33,18 +33,18 @@
     function updateDigramCount(count) {
         currentDigramCount = count;
         const label = document.getElementById('settings-digram-label');
-        console.log('updateDigramCount called with count:', count, 'label found:', !!label);
+        // console.log('updateDigramCount called with count:', count, 'label found:', !!label);
         if (label) {
             label.textContent = `Minimum Digram Frequency (${count} digrams detected)`;
-            console.log('Updated label to:', label.textContent);
+            // console.log('Updated label to:', label.textContent);
         } else {
-            console.error('settings-digram-label element not found!');
+            // console.error('settings-digram-label element not found!');
         }
     }
 
     // Recalculate digram count based on current MIN_FREQ
     function recalculateDigramCount() {
-        console.log('recalculateDigramCount called, storedCounts:', storedCounts ? 'exists' : 'null');
+        // console.log('recalculateDigramCount called, storedCounts:', storedCounts ? 'exists' : 'null');
         if (!storedCounts) return;
         
         const minFreqInput = document.getElementById('min-freq-input');
@@ -52,13 +52,13 @@
             MIN_FREQ = parseInt(minFreqInput.value) || 1;
         }
         
-        console.log('MIN_FREQ:', MIN_FREQ);
+        // console.log('MIN_FREQ:', MIN_FREQ);
         
         const count = Object.entries(storedCounts)
             .filter(([name, freq]) => freq >= MIN_FREQ)
             .length;
         
-        console.log('Calculated count:', count);
+        // console.log('Calculated count:', count);
         updateDigramCount(count);
     }
 
@@ -734,13 +734,13 @@
         const pluginTasksHeading = headings.find(h => h.textContent.includes('Plugin'));
         
         if (!pluginTasksHeading) {
-            console.log('Plugin Tasks heading not found');
+            console.error('Plugin Tasks heading not found');
             return;
         }
         
         const card = pluginTasksHeading.nextElementSibling;
         if (!card || !card.classList.contains('card')) {
-            console.log('Card not found after heading');
+            console.error('Card not found after heading');
             return;
         }
         

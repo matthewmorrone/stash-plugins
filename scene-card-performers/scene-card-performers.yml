@@ -1,0 +1,7 @@
+name: Stash Scene Card Performers
+description: Shows performers on scene cards and allows adding/removing performers inline
+version: 0.1.0
+url: https://github.com/matthewmorrone/stash-plugins
+ui:
+  javascript:
+    - scene-card-performers.js

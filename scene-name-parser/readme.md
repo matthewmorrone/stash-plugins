@@ -1,0 +1,1 @@
+This script is helpful if/when you're starting from scratch and you have a lot of files that have their performers in their filename. It will find the most common bigrams and match them against stashdb for your review. 

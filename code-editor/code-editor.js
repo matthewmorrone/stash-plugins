@@ -47,6 +47,12 @@
             .CodeMirror-gutters {
                 border-right: 1px solid rgba(127, 127, 127, 0.25);
             }
+            .CodeMirror-activeline-background {
+                background: rgba(255, 255, 255, 0.06);
+            }
+            .CodeMirror-activeline-gutter {
+                background: rgba(255, 255, 255, 0.06);
+            }
         `;
         document.head.appendChild(style);
     }
@@ -139,17 +145,36 @@
                 extraKeys["Cmd-/"] = "toggleComment";
                 extraKeys["Ctrl-/"] = "toggleComment";
             }
+            if (window.CodeMirror?.commands?.find) {
+                extraKeys["Cmd-F"] = "find";
+                extraKeys["Ctrl-F"] = "find";
+                extraKeys["Cmd-G"] = "findNext";
+                extraKeys["Ctrl-G"] = "findNext";
+                extraKeys["Shift-Cmd-G"] = "findPrev";
+                extraKeys["Shift-Ctrl-G"] = "findPrev";
+                extraKeys["Shift-Cmd-F"] = "replace";
+                extraKeys["Shift-Ctrl-F"] = "replace";
+            }
+            extraKeys["Ctrl-Q"] = function(cm) {
+                if (typeof cm?.foldCode === 'function') {
+                    cm.foldCode(cm.getCursor());
+                }
+            };
 
             const editor = CodeMirror.fromTextArea(textarea, {
                 mode: mode,
                 theme: 'monokai',
                 lineNumbers: true,
+                styleActiveLine: true,
+                foldGutter: true,
+                gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
                 lineWrapping: true,
                 indentUnit: 2,
                 tabSize: 2,
                 indentWithTabs: false,
                 autoCloseBrackets: true,
                 matchBrackets: true,
+                hintOptions: window.CodeMirror?.hint?.anyword ? { hint: window.CodeMirror.hint.anyword, completeSingle: false } : undefined,
                 extraKeys: extraKeys
             });
 

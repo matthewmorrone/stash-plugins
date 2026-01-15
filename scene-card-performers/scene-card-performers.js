@@ -5,13 +5,6 @@
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
-    // Only run on the Scenes list/grid page.
-    function isScenesBrowseRoute() {
-        const path = String(location.pathname || "");
-        // /scenes (browse) but not /scenes/<id>
-        return /^\/scenes\/?$/i.test(path);
-    }
-
     const PLUGIN_ROOT_ATTR = "data-stash-scene-card-performers";
     const SCP_ROOT_ATTR = "data-scp-root";
     const SCP_PILL_ATTR = "data-scp-performer-pill";
@@ -29,8 +22,6 @@
     let scpPopoverShowTimer = 0;
     let scpPopoverHideTimer = 0;
     let scpPopoverToken = 0;
-
-    let scpDatalistSeq = 0;
 
     // Track a single "active" search panel so Escape/outside-click can reliably close it.
     let scpActivePanel = null;
@@ -85,7 +76,7 @@
             const panel = scpActivePanel;
             if (!panel || panel.dataset.open !== "true") return;
             const t = e?.target;
-            if (t instanceof Node && panel.contains(t)) return;
+            if (t instanceof Node && (panel.contains(t) || panel.__scpDropdownEl?.contains?.(t))) return;
             closeActivePanel({ blur: false });
         },
         true
@@ -168,6 +159,7 @@
             [${SCP_ROOT_ATTR}] .scp-search-pill {
                 padding-left: 0.8rem;
                 padding-right: 0.8rem;
+                position: relative;
             }
 
             [${SCP_ROOT_ATTR}] .scp-search-input {
@@ -191,6 +183,56 @@
 
             [${SCP_ROOT_ATTR}] .scp-search-input::placeholder {
                 opacity: 0.75;
+            }
+
+            .scp-search-dropdown {
+                position: fixed;
+                left: 0;
+                top: 0;
+                min-width: 220px;
+                max-width: 360px;
+                max-height: 240px;
+                overflow: auto;
+                background: rgba(20, 20, 20, 0.98);
+                color: #fff;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+                padding: 4px;
+                z-index: 25000;
+                display: none;
+            }
+
+            .scp-search-dropdown[data-open="true"] {
+                display: block;
+            }
+
+            .scp-search-dropdown-item {
+                width: 100%;
+                text-align: left;
+                background: transparent;
+                border: 0;
+                color: inherit;
+                padding: 6px 8px;
+                border-radius: 8px;
+                font-size: 0.8rem;
+                line-height: 1.1;
+                cursor: pointer;
+            }
+
+            .scp-search-dropdown-item:hover,
+            .scp-search-dropdown-item:focus {
+                outline: none;
+                background: rgba(255, 255, 255, 0.10);
+            }
+
+            .scp-performer-popover a {
+                color: inherit;
+                text-decoration: none;
+            }
+
+            .scp-performer-popover a:hover {
+                text-decoration: underline;
             }
 
             [${SCP_ROOT_ATTR}].scp-root {
@@ -292,7 +334,8 @@
         el.className = "scp-performer-popover";
         el.setAttribute("data-scp-performer-popover", "1");
         el.addEventListener("mousedown", stopCardNavigationNoPrevent);
-        el.addEventListener("click", stopCardNavigation);
+        // Don't preventDefault here so links inside the popover can navigate.
+        el.addEventListener("click", stopCardNavigationNoPrevent);
         el.addEventListener("mouseenter", () => {
             if (scpPopoverHideTimer) {
                 clearTimeout(scpPopoverHideTimer);
@@ -469,11 +512,13 @@
                     ? `Scenes: ${sceneCount}`
                     : "";
 
+            const performerHref = `/performers/${encodeURIComponent(String(performerId))}`;
+
             el.innerHTML = `
                 <div class="scp-pop-inner">
                     ${imgUrl ? `<img class="scp-pop-img" src="${imgUrl}" alt="" />` : `<div class="scp-pop-img"></div>`}
                     <div>
-                        <div class="scp-pop-title">${escapeHtml(name)}</div>
+                        <div class="scp-pop-title"><a href="${performerHref}">${escapeHtml(name)}</a></div>
                         ${sceneLine ? `<div class="scp-pop-sub">${escapeHtml(sceneLine)}</div>` : ""}
                     </div>
                 </div>
@@ -754,6 +799,149 @@
         return match[1];
     }
 
+    function getUniqueSceneIdsWithin(el) {
+        const ids = new Set();
+        if (!(el instanceof Element)) return ids;
+        const links = el.querySelectorAll("a[href*='/scenes/']");
+        for (const a of links) {
+            const id = getSceneIdFromHref(a.getAttribute("href"));
+            if (id) ids.add(id);
+            if (ids.size > 1) return ids;
+        }
+        return ids;
+    }
+
+    function countSceneLinksWithin(el, sceneId, maxCount = 3) {
+        if (!(el instanceof Element)) return 0;
+        const wanted = String(sceneId || "");
+        if (!wanted) return 0;
+
+        let count = 0;
+        const links = el.querySelectorAll("a[href*='/scenes/']");
+        for (const a of links) {
+            const id = getSceneIdFromHref(a.getAttribute("href"));
+            if (id && String(id) === wanted) {
+                count++;
+                if (count >= maxCount) return count;
+            }
+        }
+        return count;
+    }
+
+    function unregisterContainer(sceneId, container) {
+        const id = String(sceneId || "");
+        if (!id || !(container instanceof Element)) return;
+        const set = sceneContainersById.get(id);
+        if (!set) return;
+        try {
+            set.delete(container);
+        } catch {
+            // ignore
+        }
+        if (!set.size) sceneContainersById.delete(id);
+    }
+
+    function getPreferredMountParent(cardEl) {
+        if (!(cardEl instanceof Element)) return cardEl;
+        return (
+            cardEl.querySelector(".card-footer") ||
+            cardEl.querySelector(".card-body") ||
+            cardEl.querySelector("[class*='CardBody']") ||
+            cardEl
+        );
+    }
+
+    function findVisualCardElement(containerEl, sceneId) {
+        if (!(containerEl instanceof Element)) return null;
+        const wanted = String(sceneId || "");
+        if (!wanted) return null;
+
+        const cardLikeSel = ".scene-card, [class*='scene-card'], [class*='SceneCard'], .card";
+
+        // If the container itself is a card-like element and matches the scene, use it.
+        if (containerEl.matches(cardLikeSel)) {
+            const ids = getUniqueSceneIdsWithin(containerEl);
+            if (ids.size === 1 && ids.has(wanted)) return containerEl;
+        }
+
+        // Otherwise pick the smallest/closest card-like descendant that still contains only this scene.
+        const candidates = Array.from(containerEl.querySelectorAll(cardLikeSel));
+        let best = null;
+        let bestDepth = -1;
+        for (const el of candidates) {
+            const ids = getUniqueSceneIdsWithin(el);
+            if (!(ids.size === 1 && ids.has(wanted))) continue;
+
+            // Prefer deeper (more specific) elements.
+            let depth = 0;
+            let n = el;
+            while (n && n !== containerEl && depth < 30) {
+                depth++;
+                n = n.parentElement;
+            }
+            if (depth > bestDepth) {
+                bestDepth = depth;
+                best = el;
+            }
+        }
+
+        return best || containerEl;
+    }
+
+    function findOutermostSingleSceneContainer(startEl, sceneId) {
+        if (!(startEl instanceof Element)) return null;
+        const wanted = String(sceneId || "");
+        if (!wanted) return null;
+
+        let node = startEl;
+        let best = null;
+        let bestLinkCount = -1;
+        let depth = 0;
+        while (node && depth++ < 24) {
+            if (node.tagName === "BODY") break;
+            const ids = getUniqueSceneIdsWithin(node);
+            if (ids.size === 1 && ids.has(wanted)) {
+                // Prefer containers that include multiple links to the same scene
+                // (typically thumbnail + title), which avoids choosing small sub-wrappers.
+                const linkCount = countSceneLinksWithin(node, wanted);
+                if (linkCount > bestLinkCount) {
+                    best = node;
+                    bestLinkCount = linkCount;
+                } else if (linkCount === bestLinkCount) {
+                    // If tied, prefer the outermost one.
+                    best = node;
+                }
+            }
+            node = node.parentElement;
+        }
+        return best;
+    }
+
+    function canonicalizeCardRoot(cardEl, sceneId) {
+        if (!(cardEl instanceof Element)) return null;
+        const wanted = sceneId ? String(sceneId) : null;
+        const cardLikeSel = ".scene-card, [class*='scene-card'], [class*='SceneCard'], .card";
+
+        // Pick the outermost "card-like" ancestor that still contains exactly one scene id
+        // (the wanted one). This makes the choice stable even when there are multiple
+        // scene links inside the same card (image + title).
+        let best = null;
+        let node = cardEl;
+        let depth = 0;
+        while (node && depth++ < 20) {
+            if (node.tagName === "BODY") break;
+            if (node.matches?.(cardLikeSel)) {
+                const ids = getUniqueSceneIdsWithin(node);
+                if (ids.size === 1 && (!wanted || ids.has(wanted))) {
+                    best = node;
+                }
+            }
+            node = node.parentElement;
+        }
+
+        return best || cardEl;
+    }
+
     function findSceneIdInCard(cardEl) {
         if (!(cardEl instanceof Element)) return null;
         const links = cardEl.querySelectorAll("a[href]");
@@ -764,26 +952,21 @@
         return null;
     }
 
-    function findCardRootFromSceneLink(a) {
+    function findCardRootFromSceneLink(a, sceneId) {
         if (!(a instanceof Element)) return null;
-
-        // Prefer specific-ish classes; fall back to bootstrap cards.
-        return (
-            a.closest(
-                ".scene-card, [class*='scene-card'], [class*='SceneCard'], .card, [class*='gallery'], [class*='Grid'], [class*='grid']"
-            ) || a.parentElement
-        );
+        const best = findOutermostSingleSceneContainer(a, sceneId);
+        return best || a.closest(".scene-card, [class*='scene-card'], [class*='SceneCard'], .card") || a.parentElement;
     }
 
     function findLikelySceneCards() {
         const out = new Set();
 
         // Collect anchors that look like scene links.
-        const anchors = document.querySelectorAll("a[href^='/scenes/']");
+        const anchors = document.querySelectorAll("a[href*='/scenes/']");
         anchors.forEach((a) => {
             const id = getSceneIdFromHref(a.getAttribute("href"));
             if (!id) return;
-            const root = findCardRootFromSceneLink(a);
+            const root = findCardRootFromSceneLink(a, id);
             if (root) out.add(root);
         });
 
@@ -1036,19 +1219,86 @@
         });
         panel.appendChild(input);
 
-        // Native suggestions
-        const datalistId = `scp-dl-${type}-${sceneId}-${++scpDatalistSeq}`;
-        const datalist = createEl("datalist", { attrs: { id: datalistId } });
-        input.setAttribute("list", datalistId);
+        // Custom dropdown suggestions (rendered as a floating overlay so it can't be clipped)
+        const dropdown = createEl("div", {
+            className: "scp-search-dropdown",
+            attrs: { "data-scp-search-dropdown": "1", role: "listbox" },
+        });
+        dropdown.dataset.open = "false";
+        dropdown.addEventListener("mousedown", stopCardNavigationNoPrevent);
+        dropdown.addEventListener("click", stopCardNavigationNoPrevent);
+        // Attach as overlay.
+        (document.body || document.documentElement).appendChild(dropdown);
 
         let lastQuery = "";
         let requestToken = 0;
         let lastMatches = [];
         let lastCandidates = []; // filtered results (not already on scene)
+        let suppressBlurSubmit = false;
+        let activeIndex = -1;
+
+        function positionDropdown() {
+            if (!dropdown || dropdown.dataset.open !== "true") return;
+            const rect = input.getBoundingClientRect();
+            const pad = 8;
+
+            // Default: below input.
+            let left = rect.left;
+            let top = rect.bottom + 6;
+            const width = Math.max(220, Math.min(360, rect.width));
+
+            // Clamp horizontally.
+            left = Math.max(pad, Math.min(left, window.innerWidth - width - pad));
+
+            dropdown.style.width = `${Math.round(width)}px`;
+
+            // Temporarily show to measure height for vertical clamping.
+            const prev = dropdown.style.display;
+            dropdown.style.display = "block";
+            const h = dropdown.getBoundingClientRect().height;
+
+            const maxTop = window.innerHeight - h - pad;
+            if (top > maxTop) {
+                top = rect.top - h - 6;
+            }
+            top = Math.max(pad, Math.min(top, maxTop));
+
+            dropdown.style.left = `${Math.round(left)}px`;
+            dropdown.style.top = `${Math.round(top)}px`;
+            dropdown.style.display = prev || "block";
+        }
+
+        let dropdownPositionBound = false;
+        function bindDropdownPositioning() {
+            if (dropdownPositionBound) return;
+            dropdownPositionBound = true;
+            window.addEventListener("scroll", positionDropdown, true);
+            window.addEventListener("resize", positionDropdown, true);
+        }
+
+        function unbindDropdownPositioning() {
+            if (!dropdownPositionBound) return;
+            dropdownPositionBound = false;
+            window.removeEventListener("scroll", positionDropdown, true);
+            window.removeEventListener("resize", positionDropdown, true);
+        }
+
+        function openDropdown() {
+            dropdown.dataset.open = "true";
+            bindDropdownPositioning();
+            positionDropdown();
+        }
+
+        function closeDropdown() {
+            dropdown.dataset.open = "false";
+            dropdown.innerHTML = "";
+            activeIndex = -1;
+            unbindDropdownPositioning();
+        }
 
         function closePanel() {
             panel.dataset.open = "false";
-            datalist.innerHTML = "";
+            closeDropdown();
             input.value = "";
             lastQuery = "";
 
@@ -1059,11 +1309,19 @@
             } catch {
                 // ignore
             }
+
+            // Tear down overlay element.
+            try {
+                if (dropdown && dropdown.isConnected) dropdown.remove();
+            } catch {
+                // ignore
+            }
         }
 
         // Let global handlers close/blur the currently open panel.
         panel.__scpClosePanel = closePanel;
         panel.__scpInputEl = input;
+        panel.__scpDropdownEl = dropdown;
 
         // Ensure we always track the current open panel.
         input.addEventListener("focus", () => {
@@ -1082,6 +1340,7 @@
         // Make blur close the panel too (with the same submit-on-blur behavior).
         input.addEventListener("blur", async () => {
             if (panel.dataset.open !== "true") return;
+            if (suppressBlurSubmit) return;
             await sleep(0);
             const active = document.activeElement;
             if (active && active instanceof Node && panel.contains(active)) return;
@@ -1117,7 +1376,7 @@
             return match?.id ? String(match.id) : null;
         }
 
-        async function trySubmitFromQuery(q) {
+        async function trySubmitFromQuery(q, { allowSingleCandidate = true } = {}) {
             const query = String(q || "").trim();
             if (!query) return false;
 
@@ -1127,7 +1386,9 @@
                 return true;
             }
 
-            if ((lastCandidates || []).length === 1 && lastCandidates[0]?.id) {
+            // IMPORTANT: Only treat a single suggestion as unambiguous when we explicitly allow it
+            // (e.g., blur-to-submit). For Enter, users often intend to create a new entity name.
+            if (allowSingleCandidate && (lastCandidates || []).length === 1 && lastCandidates[0]?.id) {
                 await addEntityById(String(lastCandidates[0].id));
                 return true;
             }
@@ -1135,15 +1396,61 @@
             return false;
         }
 
-        function updateDatalistOptions() {
-            datalist.innerHTML = "";
+        function updateDropdownOptions() {
+            dropdown.innerHTML = "";
+
+            const items = Array.isArray(lastCandidates) ? lastCandidates.slice(0, 12) : [];
+            if (!items.length || panel.dataset.open !== "true") {
+                closeDropdown();
+                return;
+            }
+
             const frag = document.createDocumentFragment();
-            (lastCandidates || []).forEach((m) => {
-                const opt = document.createElement("option");
-                opt.value = String(m?.name || "");
-                frag.appendChild(opt);
+            items.forEach((m, idx) => {
+                const id = m?.id != null ? String(m.id) : "";
+                const name = String(m?.name || "");
+                if (!id || !name) return;
+
+                const btn = createEl("button", {
+                    className: "scp-search-dropdown-item",
+                    text: name,
+                    attrs: {
+                        type: "button",
+                        role: "option",
+                        "data-scp-option-id": id,
+                        "data-scp-option-idx": String(idx),
+                    },
+                });
+
+                // Select should submit immediately (no Enter required).
+                btn.addEventListener("mousedown", (e) => {
+                    stopCardNavigation(e);
+                    // Keep focus on the input until we handle click.
+                    suppressBlurSubmit = true;
+                    e.preventDefault();
+                });
+
+                btn.addEventListener("click", async (e) => {
+                    stopCardNavigation(e);
+                    try {
+                        const pickedId = btn.getAttribute("data-scp-option-id");
+                        if (!pickedId) return;
+                        await addEntityById(pickedId);
+                    } catch (err) {
+                        console.error("[SceneCardPerformers] submit failed", err);
+                        showInlineError(panel.closest(`[${SCP_ROOT_ATTR}]`) || panel.parentElement || panel, String(err?.message || err));
+                    } finally {
+                        suppressBlurSubmit = false;
+                        closePanel();
+                        input.blur();
+                    }
+                });
+
+                frag.appendChild(btn);
             });
-            datalist.appendChild(frag);
+            dropdown.appendChild(frag);
+            openDropdown();
+            positionDropdown();
         }
 
         async function refreshCandidatesNow(q) {
@@ -1164,13 +1471,13 @@
                 const existing = new Set(getEntitiesFromScene(scene, type).map((x) => String(x.id)));
                 const filtered = matches.filter((p) => !existing.has(String(p.id)));
                 lastCandidates = filtered;
-                updateDatalistOptions();
+                updateDropdownOptions();
             } catch (err) {
                 if (token !== requestToken) return;
                 console.error("[SceneCardPerformers] search failed", err);
                 showInlineError(panel.closest(`[${SCP_ROOT_ATTR}]`) || panel.parentElement || panel, String(err?.message || err));
                 lastCandidates = [];
-                updateDatalistOptions();
+                updateDropdownOptions();
             }
         }
 
@@ -1186,7 +1493,7 @@
             if (!q) {
                 lastMatches = [];
                 lastCandidates = [];
-                datalist.innerHTML = "";
+                closeDropdown();
                 if (type === "tag" && panel.dataset.open === "true") {
                     // For tags, keep options populated even when blank.
                     requestToken++;
@@ -1211,18 +1518,39 @@
                 return;
             }
 
+            if (e.key === "ArrowDown") {
+                stopCardNavigation(e);
+                const items = Array.from(dropdown.querySelectorAll(".scp-search-dropdown-item"));
+                if (!items.length) return;
+                activeIndex = Math.min(items.length - 1, activeIndex + 1);
+                items[activeIndex]?.focus?.();
+                return;
+            }
+
+            if (e.key === "ArrowUp") {
+                stopCardNavigation(e);
+                const items = Array.from(dropdown.querySelectorAll(".scp-search-dropdown-item"));
+                if (!items.length) return;
+                activeIndex = Math.max(0, activeIndex - 1);
+                items[activeIndex]?.focus?.();
+                return;
+            }
+
             if (e.key !== "Enter") return;
 
             stopCardNavigation(e);
             try {
                 const query = String(input.value || "").trim();
 
-                // With native <datalist>, users can select an option and press Enter
-                // before our debounced search finishes. Force a fresh search so we
-                // can resolve the name to an existing id and avoid duplicate creates.
+                // Users can press Enter before our debounced search finishes.
+                // Force a fresh search so we can resolve the name to an existing id
+                // and avoid duplicate creates.
                 await refreshCandidatesNow(query);
 
-                const didSubmit = await trySubmitFromQuery(query);
+                // Enter should only submit exact matches (or an explicitly clicked dropdown item).
+                // This prevents accidentally adding a stale/closest suggestion when the typed text
+                // doesn't match any existing entity.
+                const didSubmit = await trySubmitFromQuery(query, { allowSingleCandidate: false });
 
                 // If not an exact/unique match, treat Enter as "create + add".
                 if (!didSubmit && query) {
@@ -1236,26 +1564,6 @@
                 showInlineError(panel.closest(`[${SCP_ROOT_ATTR}]`) || panel.parentElement || panel, String(err?.message || err));
                 closePanel();
                 input.blur();
-            }
-        });
-
-        // With native <datalist>, selecting an option often commits via 'change' without Enter.
-        // Treat that as an immediate accept/add of the chosen entry.
-        input.addEventListener("change", async (e) => {
-            stopCardNavigation(e);
-            if (panel.dataset.open !== "true") return;
-            try {
-                const query = String(input.value || "").trim();
-                if (!query) return;
-                await refreshCandidatesNow(query);
-                const didSubmit = await trySubmitFromQuery(query);
-                if (didSubmit) {
-                    closePanel();
-                    input.blur();
-                }
-            } catch (err) {
-                console.error("[SceneCardPerformers] change accept failed", err);
-                showInlineError(panel.closest(`[${SCP_ROOT_ATTR}]`) || panel.parentElement || panel, String(err?.message || err));
             }
         });
 
@@ -1307,7 +1615,6 @@
             true
         );
 
-        panel.appendChild(datalist);
         return panel;
     }
 
@@ -1325,24 +1632,61 @@
 
     async function ensureInjectedForCard(cardEl) {
         if (!(cardEl instanceof Element)) return;
-        if (cardEl.querySelector(`[${PLUGIN_ROOT_ATTR}]`)) return;
 
         const sceneId = findSceneIdInCard(cardEl);
         if (!sceneId) return;
 
+        // The scanner may return a wrapper around the real visual card (especially on the home page).
+        // Always inject INSIDE the actual card element if we can find it.
+        const cardScopeEl = findVisualCardElement(cardEl, sceneId) || cardEl;
+        const preferredParent = getPreferredMountParent(cardScopeEl);
+
+        // If we already injected, ensure it's in the right place and dedupe.
+        const existingMounts = Array.from(cardScopeEl.querySelectorAll(`[${PLUGIN_ROOT_ATTR}]`)).filter((el) => {
+            if (!(el instanceof Element)) return false;
+            const sid = el.getAttribute("data-scp-scene-id");
+            return !sid || sid === String(sceneId);
+        });
+
+        if (existingMounts.length) {
+            // Prefer a mount already inside the preferred parent.
+            const keep =
+                existingMounts.find((m) => preferredParent && preferredParent.contains(m)) ||
+                existingMounts[0];
+
+            // Remove duplicates.
+            for (const m of existingMounts) {
+                if (m === keep) continue;
+                unregisterContainer(sceneId, m);
+                try {
+                    m.remove();
+                } catch {
+                    // ignore
+                }
+            }
+
+            // Ensure attributes + placement.
+            try {
+                keep.setAttribute("data-scp-scene-id", String(sceneId));
+            } catch {
+                // ignore
+            }
+
+            if (preferredParent && keep.parentElement !== preferredParent) {
+                preferredParent.appendChild(keep);
+            }
+
+            ensureContainerRegistered(sceneId, keep);
+            return;
+        }
+
         const mount = createEl("div", {
             className: "scp-root",
-            attrs: { [PLUGIN_ROOT_ATTR]: "1", [SCP_ROOT_ATTR]: "1" },
+            attrs: { [PLUGIN_ROOT_ATTR]: "1", [SCP_ROOT_ATTR]: "1", "data-scp-scene-id": String(sceneId) },
         });
 
         // Try to place in a sensible spot inside the card.
-        const preferred =
-            cardEl.querySelector(".card-body") ||
-            cardEl.querySelector(".card-footer") ||
-            cardEl.querySelector("[class*='CardBody']") ||
-            cardEl;
-
-        preferred.appendChild(mount);
+        (preferredParent || cardScopeEl).appendChild(mount);
 
         ensureContainerRegistered(sceneId, mount);
 
@@ -1361,13 +1705,25 @@
     }
 
     async function scanAndInject() {
-        if (!isScenesBrowseRoute()) return;
+        if (scanAndInject.__inProgress) {
+            scanAndInject.__queued = true;
+            return;
+        }
+        scanAndInject.__inProgress = true;
 
-        const cards = findLikelySceneCards();
-        // Keep things gentle: avoid a burst of 100 parallel GraphQL queries.
-        for (const card of cards) {
-            // eslint-disable-next-line no-await-in-loop
-            await ensureInjectedForCard(card);
+        try {
+            const cards = findLikelySceneCards();
+            // Keep things gentle: avoid a burst of 100 parallel GraphQL queries.
+            for (const card of cards) {
+                // eslint-disable-next-line no-await-in-loop
+                await ensureInjectedForCard(card);
+            }
+        } finally {
+            scanAndInject.__inProgress = false;
+            if (scanAndInject.__queued) {
+                scanAndInject.__queued = false;
+                setTimeout(scanAndInject, 0);
+            }
         }
     }
 

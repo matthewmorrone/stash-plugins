@@ -24,3 +24,6 @@ Moves the Performers and Tags fields above the Title field on scene edit.
 
 ### Scene Card Performers
 Shows performers on scene cards and allows adding/removing performers inline.
+
+### Scene Performer Roles
+Adds small role icons to performer cards on scene pages; stores neutral per-scene/per-performer roles in your browser.

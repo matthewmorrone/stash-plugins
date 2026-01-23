@@ -5,11 +5,9 @@ url: https://github.com/matthewmorrone/stash-plugins
 ui:
   css:
     - codemirror.min.css
-    - codemirror-addons.bundle.min.css
     - monokai.min.css
   javascript:
     - codemirror.min.js
-    - codemirror-addons.bundle.min.js
     - css.min.js
     - javascript.min.js
     - code-editor.js

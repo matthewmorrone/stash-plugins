@@ -1,7 +1,0 @@
-name: Stash Scene Performers/Tags Top
-description: Moves Performers and Tags fields above the Title field on scene edit
-version: 0.1.0
-url: https://github.com/matthewmorrone/stash-plugins
-ui:
-  javascript:
-    - scene-edit-performers-tags-top.js

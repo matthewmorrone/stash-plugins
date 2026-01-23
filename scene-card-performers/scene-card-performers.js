@@ -97,11 +97,52 @@
                 display: none !important;
             }
 
+            /* Align title/performer/tag blocks across cards (no scrolling) */
+            :root {
+                --scp-scene-card-title-lines: 2;
+                --scp-scene-card-title-line-height: 1.2;
+                --scp-scene-card-title-block-height: calc(
+                    var(--scp-scene-card-title-lines) * 1em * var(--scp-scene-card-title-line-height)
+                );
+            }
+
+            /* Clamp titles AND reserve the same vertical space so footer content lines up */
+            .scp-card .card-title,
+            .scp-card [class*="card-title"],
+            .scp-card [class*="SceneCard"] [class*="title"],
+            .scp-card [class*="scene-card"] [class*="title"] {
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: var(--scp-scene-card-title-lines);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                line-height: calc(1em * var(--scp-scene-card-title-line-height));
+                min-height: var(--scp-scene-card-title-block-height);
+                max-height: var(--scp-scene-card-title-block-height);
+            }
+
             /* Layout */
             [${SCP_ROOT_ATTR}] .scp-row {
                 gap: 9px;
                 margin: 5px;
                 padding: 3px;
+                flex-wrap: nowrap !important;
+                overflow-x: auto;
+                overflow-y: hidden;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none; /* Firefox */
+                -ms-overflow-style: none; /* old Edge/IE */
+            }
+
+            /* Keep row children from shrinking/wrapping; allow horizontal scroll instead */
+            [${SCP_ROOT_ATTR}] .scp-row > * {
+                flex: 0 0 auto;
+            }
+
+            [${SCP_ROOT_ATTR}] .scp-row::-webkit-scrollbar {
+                display: none; /* Chrome/Safari */
+                width: 0;
+                height: 0;
             }
 
             [${SCP_ROOT_ATTR}] .scp-hr {
@@ -1095,7 +1136,7 @@
         const { cfg } = getEntityConfig(type);
 
         const row = createEl("div", {
-            className: "scp-row d-flex flex-wrap align-items-center",
+            className: "scp-row d-flex align-items-center",
             attrs: { "data-scp-row": type },
         });
 
@@ -1639,6 +1680,13 @@
         // The scanner may return a wrapper around the real visual card (especially on the home page).
         // Always inject INSIDE the actual card element if we can find it.
         const cardScopeEl = findVisualCardElement(cardEl, sceneId) || cardEl;
+
+        // Mark the card so our alignment CSS can be scoped safely.
+        try {
+            cardScopeEl.classList.add("scp-card");
+        } catch {
+            // ignore
+        }
         const preferredParent = getPreferredMountParent(cardScopeEl);
 
         // If we already injected, ensure it's in the right place and dedupe.

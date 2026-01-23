@@ -9,6 +9,12 @@
     let lastSceneKey = null;
     let activeAttemptToken = 0;
 
+    // Cache scene organized status so we only query once per scene.
+    const organizedCache = new Map(); // sceneId -> boolean | null
+    const organizedInFlight = new Map(); // sceneId -> Promise<boolean|null>
+    const organizedLastErrorAt = new Map(); // sceneId -> ms
+    const ORGANIZED_RETRY_MS = 1000;
+
     function getSceneKeyFromLocation() {
         const path = String(location.pathname || "");
         const match = path.match(/\/scenes\/(.+?)(?:\/|$)/i);
@@ -43,6 +49,59 @@
 
     function normalizeText(text) {
         return String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
+    }
+
+    async function gql(query, variables) {
+        const response = await fetch("/graphql", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, variables }),
+        });
+
+        const data = await response.json();
+        if (data?.errors?.length) {
+            const msg = data.errors.map((e) => e?.message).filter(Boolean).join("; ");
+            throw new Error(msg || "GraphQL error");
+        }
+
+        return data?.data;
+    }
+
+    async function fetchSceneOrganized(sceneId) {
+        const query = `
+            query FindScene($id: ID!) {
+                findScene(id: $id) {
+                    id
+                    organized
+                }
+            }
+        `;
+        const data = await gql(query, { id: sceneId });
+        const organized = data?.findScene?.organized;
+        return typeof organized === "boolean" ? organized : null;
+    }
+
+    function ensureOrganizedFetched(sceneId) {
+        if (!sceneId) return;
+        if (organizedCache.has(sceneId)) return;
+        if (organizedInFlight.has(sceneId)) return;
+
+        const lastErr = organizedLastErrorAt.get(sceneId) || 0;
+        if (lastErr && Date.now() - lastErr < ORGANIZED_RETRY_MS) return;
+
+        const p = (async () => {
+            try {
+                const organized = await fetchSceneOrganized(sceneId);
+                organizedCache.set(sceneId, organized);
+                return organized;
+            } catch {
+                organizedLastErrorAt.set(sceneId, Date.now());
+                return null;
+            }
+        })();
+
+        organizedInFlight.set(sceneId, p);
+        p.finally(() => organizedInFlight.delete(sceneId));
     }
 
     function findEditTab() {
@@ -103,7 +162,6 @@
 
         // Only force on first arrival to a new scene.
         if (sceneKey === lastSceneKey) return;
-        lastSceneKey = sceneKey;
 
         const attemptToken = ++activeAttemptToken;
         const startedAt = Date.now();
@@ -116,6 +174,10 @@
             intervalId = null;
             if (observer) observer.disconnect();
             observer = null;
+        }
+
+        function markHandled() {
+            lastSceneKey = sceneKey;
         }
 
         function tick() {
@@ -132,16 +194,35 @@
                 return;
             }
 
+            // Only switch tabs when the scene is NOT organized.
+            // If we cannot determine status, do nothing (to satisfy the requirement).
+            const cached = organizedCache.get(sceneKey);
+            if (cached === true) {
+                markHandled();
+                cleanup();
+                return;
+            }
+            if (cached !== false) {
+                ensureOrganizedFetched(sceneKey);
+                if (Date.now() - startedAt > MAX_WAIT_MS) {
+                    markHandled();
+                    cleanup();
+                }
+                return;
+            }
+
             const editTab = findEditTab();
             if (editTab) {
                 if (!isActiveTab(editTab)) {
                     editTab.click();
                 }
+                markHandled();
                 cleanup();
                 return;
             }
 
             if (Date.now() - startedAt > MAX_WAIT_MS) {
+                markHandled();
                 cleanup();
             }
         }

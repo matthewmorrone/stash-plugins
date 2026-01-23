@@ -1,0 +1,7 @@
+name: Stash Hide Installed Plugins
+description: Hides already-installed plugins from the Available Plugins list; they reappear after uninstall.
+version: 0.1.0
+url: https://github.com/matthewmorrone/stash-plugins
+ui:
+  javascript:
+    - hide-installed-plugins.js

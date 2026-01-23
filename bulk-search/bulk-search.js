@@ -1,5 +1,6 @@
 (function () {
-    const DELAY = 300;
+    // todo: make this a configurable setting
+    const DELAY = 500;
 
     async function bulkSearch() {
         const buttons = [...document.querySelectorAll(

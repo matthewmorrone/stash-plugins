@@ -21,8 +21,8 @@
         [ROLE_RECEIVER]: "Receiver",
     };
     const ROLE_ICON = {
-        [ROLE_INITIATOR]: "I",
-        [ROLE_RECEIVER]: "R",
+        [ROLE_INITIATOR]: "↑",
+        [ROLE_RECEIVER]: "↓",
     };
 
     function ensureStyles() {

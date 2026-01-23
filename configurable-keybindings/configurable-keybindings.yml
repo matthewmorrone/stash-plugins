@@ -1,0 +1,7 @@
+name: Stash Configurable Keybindings
+description: WIP; Adds configurable keyboard shortcuts for the video player (includes frame-step via time increments)
+version: 0.1.0
+url: https://github.com/matthewmorrone/stash-plugins
+ui:
+  javascript:
+    - configurable-keybindings.js

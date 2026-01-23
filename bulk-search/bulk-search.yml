@@ -1,7 +1,8 @@
 name: Bulk Performer Search
 description: Clicks all performer Search buttons with delay
 version: 0.1.0
-url: https://github.com/matthewmorrone
+url: https://github.com/matthewmorrone/stash-plugins
 ui:
   javascript:
     - bulk-search.js
+

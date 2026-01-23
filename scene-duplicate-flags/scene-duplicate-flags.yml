@@ -1,4 +1,4 @@
-name: Stash Scene Duplicate Checker Tools
+name: Scene Duplicate Checker Tools
 description: Enhances /sceneDuplicateChecker with Confirm/Ignore controls and optional duplicate-group tagging.
 version: 0.1.0
 url: https://github.com/matthewmorrone/stash-plugins

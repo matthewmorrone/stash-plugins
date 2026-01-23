@@ -28,7 +28,7 @@
     }
 
     function ensurePrettyStyles() {
-        const styleId = "stash-code-editor-pretty";
+        const styleId = "code-editor-pretty";
         if (document.getElementById(styleId)) return;
 
         const style = document.createElement("style");

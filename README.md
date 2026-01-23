@@ -1,6 +1,6 @@
 # stash-plugins
 
-Collection of Stash plugins by matthewmorrone
+Collection of plugins by matthewmorrone
 
 ## Plugins
 

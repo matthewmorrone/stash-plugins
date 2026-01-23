@@ -1,13 +1,13 @@
 (function () {
     "use strict";
 
-    const INSTALL_FLAG = "__stash_hide_installed_plugins_installed__";
+    const INSTALL_FLAG = "__hide_installed_plugins_installed__";
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
     const MAX_ANCESTOR_HOPS = 14;
     const DEBOUNCE_MS = 75;
-    const DEBUG = localStorage.getItem("stash_hide_installed_plugins_debug") === "1";
+    const DEBUG = localStorage.getItem("hide_installed_plugins_debug") === "1";
 
     function normalizeText(s) {
         return String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -304,7 +304,7 @@
     }
 
     function emitLocationChange() {
-        window.dispatchEvent(new Event("stash-locationchange"));
+        window.dispatchEvent(new Event("locationchange"));
     }
 
     function installLocationHooks() {
@@ -325,7 +325,7 @@
 
         window.addEventListener("popstate", emitLocationChange);
         window.addEventListener("hashchange", emitLocationChange);
-        window.addEventListener("stash-locationchange", () => {
+        window.addEventListener("locationchange", () => {
             setTimeout(() => {
                 // Keep a single observer; just schedule an apply (or restore) on nav.
                 scheduleApply();

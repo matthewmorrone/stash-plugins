@@ -1,11 +1,11 @@
 (function () {
     "use strict";
 
-    const INSTALL_FLAG = "__stash_scene_card_performers_installed__";
+    const INSTALL_FLAG = "__scene_card_performers_installed__";
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
-    const PLUGIN_ROOT_ATTR = "data-stash-scene-card-performers";
+    const PLUGIN_ROOT_ATTR = "data-scene-card-performers";
     const SCP_ROOT_ATTR = "data-scp-root";
     const SCP_PILL_ATTR = "data-scp-performer-pill";
     const SCP_STYLE_ID = "scp-scene-card-performers-style";
@@ -1776,7 +1776,7 @@
     }
 
     function emitLocationChange() {
-        window.dispatchEvent(new Event("stash-locationchange"));
+        window.dispatchEvent(new Event("locationchange"));
     }
 
     function installLocationHooks() {
@@ -1797,7 +1797,7 @@
 
         window.addEventListener("popstate", emitLocationChange);
         window.addEventListener("hashchange", emitLocationChange);
-        window.addEventListener("stash-locationchange", () => {
+        window.addEventListener("locationchange", () => {
             setTimeout(scanAndInject, 0);
         });
     }

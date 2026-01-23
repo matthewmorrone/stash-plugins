@@ -1,7 +1,7 @@
 (function () {
     "use strict";
 
-    const INSTALL_FLAG = "__stash_scene_duplicate_checker_tools_installed__";
+    const INSTALL_FLAG = "__scene_duplicate_checker_tools_installed__";
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
@@ -12,10 +12,10 @@
 
     if (!isDuplicateCheckerPage()) return;
 
-    const STORE_KEY = "stash_scene_duplicate_checker_tools_v1";
-    const STYLE_ID = "stash-scene-duplicate-checker-tools-style";
+    const STORE_KEY = "scene_duplicate_checker_tools_v1";
+    const STYLE_ID = "cene-duplicate-checker-tools-style";
 
-    const STORE_CHANGED_EVENT = "stash_scene_duplicate_checker_tools_changed";
+    const STORE_CHANGED_EVENT = "scene_duplicate_checker_tools_changed";
 
     function nowIso() {
         try {

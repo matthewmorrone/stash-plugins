@@ -1,12 +1,13 @@
 (function () {
     "use strict";
 
-    const INSTALL_FLAG = "__stash_configurable_keybindings_installed__";
+    const INSTALL_FLAG = "__configurable_keybindings_installed__";
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
-    const STORE_KEY = "stash_configurable_keybindings_v1";
-    const STYLE_ID = "stash-configurable-keybindings-style";
+    const STORE_KEY = "configurable_keybindings_v1";
+
+    const STYLE_ID = "configurable-keybindings-style";
 
     function clamp(n, min, max) {
         return Math.max(min, Math.min(max, n));
@@ -625,7 +626,7 @@
     // Small hint if the user lands on a scene page.
     if (getSceneIdFromLocation()) {
         // Don’t spam; only show once per tab.
-        const hintKey = "__stash_configurable_keybindings_hint__";
+        const hintKey = "__configurable_keybindings_hint__";
         if (!window[hintKey]) {
             window[hintKey] = true;
             const store = loadStore();

@@ -1,13 +1,13 @@
 (function () {
-    const INSTALL_FLAG = "__stash_scene_edit_pinned_fields_installed__";
+    const INSTALL_FLAG = "__scene_edit_pinned_fields_installed__";
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
     let activeAttemptToken = 0;
     let lastSceneKey = null;
 
-    const STORE_KEY = "stash_scene_edit_pins_v1";
-    const STYLE_ID = "stash-scene-edit-pins-style";
+    const STORE_KEY = "scene_edit_pins_v1";
+    const STYLE_ID = "scene-edit-pins-style";
 
     // Per-scene stable ordering so unpinning returns to normal order.
     const rankByScene = new Map(); // sceneKey -> Map(fieldKey -> rank)
@@ -434,7 +434,7 @@
     }
 
     function emitLocationChange() {
-        window.dispatchEvent(new Event("stash-locationchange"));
+        window.dispatchEvent(new Event("locationchange"));
     }
 
     function installLocationHooks() {
@@ -455,7 +455,7 @@
 
         window.addEventListener("popstate", emitLocationChange);
         window.addEventListener("hashchange", emitLocationChange);
-        window.addEventListener("stash-locationchange", () => {
+        window.addEventListener("locationchange", () => {
             setTimeout(installOrRefreshObserverForScene, 0);
         });
     }

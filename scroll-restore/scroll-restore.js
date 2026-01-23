@@ -1,5 +1,5 @@
 (function () {
-    const STORAGE_KEY_PREFIX = "stash-scroll:";
+    const STORAGE_KEY_PREFIX = "scroll:";
 
     // Routes where scroll restore is enabled.
     // Keep this conservative to avoid surprising behavior on detail pages.
@@ -136,11 +136,7 @@
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
             timer = null;
-            try {
-                sessionStorage.setItem(key, String(getScrollTop(target)));
-            } catch {
-                // ignore
-            }
+            sessionStorage.setItem(key, String(getScrollTop(target)));
         }, 100);
     }
 
@@ -160,11 +156,8 @@
 
     function detachScrollCapture() {
         if (!scrollCaptureHandler) return;
-        try {
-            document.removeEventListener("scroll", scrollCaptureHandler, true);
-        } catch {
-            // ignore
-        }
+        document.removeEventListener("scroll", scrollCaptureHandler, true);
+
         scrollCaptureHandler = null;
         currentTarget = null;
     }
@@ -205,7 +198,7 @@
     }
 
     function emitLocationChange() {
-        window.dispatchEvent(new Event("stash-locationchange"));
+        window.dispatchEvent(new Event("locationchange"));
     }
 
     function installLocationHooks() {
@@ -226,7 +219,7 @@
 
         window.addEventListener("popstate", emitLocationChange);
         window.addEventListener("hashchange", emitLocationChange);
-        window.addEventListener("stash-locationchange", () => {
+        window.addEventListener("locationchange", () => {
             // Let the new route render before trying to find scroll container.
             setTimeout(attachForCurrentRoute, 0);
         });
@@ -236,11 +229,7 @@
     window.addEventListener("beforeunload", () => {
         if (!currentKey) return;
         if (!currentTarget) return;
-        try {
-            sessionStorage.setItem(currentKey, String(getScrollTop(currentTarget)));
-        } catch {
-            // ignore
-        }
+        sessionStorage.setItem(currentKey, String(getScrollTop(currentTarget)));
     });
 
     installLocationHooks();

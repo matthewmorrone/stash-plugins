@@ -1,14 +1,14 @@
 (function () {
     "use strict";
 
-    const INSTALL_FLAG = "__stash_scene_tagger_performer_query_installed__";
+    const INSTALL_FLAG = "__scene_tagger_performer_query_installed__";
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
     const POLL_MS = 250;
 
-    const USER_EDITED_ATTR = "data-stash-ptq-user-edited";
-    const LAST_AUTO_ATTR = "data-stash-ptq-last";
+    const USER_EDITED_ATTR = "data-ptq-user-edited";
+    const LAST_AUTO_ATTR = "data-ptq-last";
     const settingInputs = new WeakSet();
 
     function getSearchItems() {
@@ -142,8 +142,8 @@
 
     function ensureQueryInputGuarded(inputEl) {
         if (!(inputEl instanceof HTMLInputElement) && !(inputEl instanceof HTMLTextAreaElement)) return;
-        if (inputEl.getAttribute("data-stash-ptq-guard") === "1") return;
-        inputEl.setAttribute("data-stash-ptq-guard", "1");
+        if (inputEl.getAttribute("data-ptq-guard") === "1") return;
+        inputEl.setAttribute("data-ptq-guard", "1");
 
         inputEl.addEventListener(
             "input",

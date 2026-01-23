@@ -1,4 +1,4 @@
-name: Stash Scene Tagger Performer Query
+name: Scene Tagger Performer Query
 description: Autofills Scene Tagger query inputs with concatenated performer names (lowercase).
 version: 0.1.0
 url: https://github.com/matthewmorrone/stash-plugins

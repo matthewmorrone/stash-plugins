@@ -1,4 +1,4 @@
-name: Stash Scene Edit Default
+name: Scene Edit Default
 description: Ensures the Edit tab is selected when opening a scene
 version: 0.1.0
 url: https://github.com/matthewmorrone/stash-plugins

@@ -1,5 +1,5 @@
 (function () {
-    const INSTALL_FLAG = "__stash_scene_edit_default_installed__";
+    const INSTALL_FLAG = "__scene_edit_default_installed__";
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
@@ -242,7 +242,7 @@
     }
 
     function emitLocationChange() {
-        window.dispatchEvent(new Event("stash-locationchange"));
+        window.dispatchEvent(new Event("locationchange"));
     }
 
     function installLocationHooks() {
@@ -264,7 +264,7 @@
 
         window.addEventListener("popstate", emitLocationChange);
         window.addEventListener("hashchange", emitLocationChange);
-        window.addEventListener("stash-locationchange", () => {
+        window.addEventListener("locationchange", () => {
             // Delay a hair so route changes that also trigger UI transitions can settle.
             setTimeout(selectEditTabOncePerScene, 0);
         });

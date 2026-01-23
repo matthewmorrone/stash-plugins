@@ -1,16 +1,16 @@
 (function () {
     "use strict";
 
-    const INSTALL_FLAG = "__stash_scene_performer_roles_installed__";
+    const INSTALL_FLAG = "__scene_performer_roles_installed__";
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
     const STYLE_ID = "sppd-scene-performer-pair-data-style";
     const ROOT_ATTR = "data-sppd-root";
 
-    const STORAGE_KEY_V1 = "__stash_scene_performer_pair_data_v1__"; // legacy 1/2/3 store
-    const STORAGE_KEY_V2 = "__stash_scene_performer_roles_v2__"; // current roles store
-    const UI_PREF_KEY = "__stash_scene_performer_roles_ui_v1__";
+    const STORAGE_KEY_V1 = "__scene_performer_pair_data_v1__"; // legacy 1/2/3 store
+    const STORAGE_KEY_V2 = "__scene_performer_roles_v2__"; // current roles store
+    const UI_PREF_KEY = "__scene_performer_roles_ui_v1__";
     const STORE_CHANGED_EVENT = "spr-store-changed";
 
     const ROLE_INITIATOR = "initiator";
@@ -816,7 +816,7 @@
     }
 
     function emitLocationChange() {
-        window.dispatchEvent(new Event("stash-locationchange"));
+        window.dispatchEvent(new Event("locationchange"));
     }
 
     function installLocationHooks() {
@@ -837,7 +837,7 @@
 
         window.addEventListener("popstate", emitLocationChange);
         window.addEventListener("hashchange", emitLocationChange);
-        window.addEventListener("stash-locationchange", () => {
+        window.addEventListener("locationchange", () => {
             setTimeout(refreshIfOnScene, 0);
         });
     }

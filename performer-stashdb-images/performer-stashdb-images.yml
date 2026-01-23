@@ -1,0 +1,7 @@
+name: Performer StashDB Images
+description: For performers with a StashDB entry, lets you cycle left/right through available StashDB images.
+version: 0.1.0
+url: https://github.com/matthewmorrone
+ui:
+  javascript:
+    - performer-stashdb-images.js

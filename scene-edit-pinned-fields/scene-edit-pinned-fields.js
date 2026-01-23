@@ -26,6 +26,28 @@
         "[class*='react-select']",
     ].join(",");
 
+    const EDITING_SELECTOR = [
+        "input",
+        "textarea",
+        "select",
+        "[contenteditable='true']",
+        "[contenteditable='']",
+        "[contenteditable='plaintext-only']",
+        "[role='combobox']",
+        "[aria-haspopup='listbox']",
+        ".react-select__control",
+        "[class*='Select__control']",
+        "[class*='react-select']",
+    ].join(",");
+
+    function isUserEditing() {
+        const a = document.activeElement;
+        if (!(a instanceof Element)) return false;
+        return Boolean(a.matches(EDITING_SELECTOR) || a.closest(EDITING_SELECTOR));
+    }
+
+
+
     function normalizeText(text) {
         return String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
     }
@@ -376,20 +398,34 @@
         if (!(firstField instanceof Element)) return;
         if (firstField.parentElement !== rootParent) return;
 
+        // Only reorder when the order actually changes. This prevents repeated
+        // detach/reattach cycles that can break typing in some controlled inputs.
+        const desired = sorted.map((f) => f.container).filter((el) => el instanceof Element && el.parentElement === rootParent);
+
+        const desiredSet = new Set(desired);
+        const current = Array.from(rootParent.children).filter((el) => desiredSet.has(el));
+
+        let same = current.length === desired.length;
+        if (same) {
+            for (let i = 0; i < current.length; i++) {
+                if (current[i] !== desired[i]) {
+                    same = false;
+                    break;
+                }
+            }
+        }
+        if (same) return;
+
         const marker = document.createComment("seppt-pin-marker");
         rootParent.insertBefore(marker, firstField);
-
-        const frag = document.createDocumentFragment();
         try {
-            for (const f of sorted) {
+            for (const el of desired) {
                 // Skip if React has swapped this node out.
-                if (!(f.container instanceof Element)) continue;
-                if (f.container.parentElement !== rootParent) continue;
-                frag.appendChild(f.container);
+                if (!(el instanceof Element)) continue;
+                if (el.parentElement !== rootParent) continue;
+                rootParent.insertBefore(el, marker);
             }
-            rootParent.insertBefore(frag, marker);
         } finally {
-            // Ensure we never leave the marker behind.
             if (marker.parentNode === rootParent) rootParent.removeChild(marker);
         }
     }
@@ -401,6 +437,8 @@
             rafScheduled = false;
             // Only run when on a scene page.
             if (!getSceneKeyFromLocation()) return;
+            // Avoid rearranging the form while the user is typing/selecting.
+            if (isUserEditing()) return;
             applyPinsAndReorder();
         });
     }
@@ -425,7 +463,9 @@
             scheduleEnsure();
         });
 
-        if (document.body) observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+        // Avoid observing attributes: React updates many attributes during typing,
+        // and reordering in response can steal focus.
+        if (document.body) observer.observe(document.body, { subtree: true, childList: true });
 
         // Initial positioning (and one extra frame for React's initial render pass).
         applyPinsAndReorder();

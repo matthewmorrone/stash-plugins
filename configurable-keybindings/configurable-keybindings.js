@@ -1,6 +1,10 @@
 (function () {
     "use strict";
 
+    // Hard-disable: set to false to re-enable plugin behavior.
+    const ENABLED = false;
+    if (!ENABLED) return;
+
     const INSTALL_FLAG = "__configurable_keybindings_installed__";
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
@@ -13,11 +17,31 @@
         return Math.max(min, Math.min(max, n));
     }
 
+    const EDITABLE_SELECTOR = [
+        "input",
+        "textarea",
+        "select",
+        "[contenteditable='true']",
+        "[contenteditable='']",
+        "[contenteditable='plaintext-only']",
+        ".CodeMirror",
+        ".cm-editor",
+
+        // Stash uses react-select for performers/tags/etc; key events can
+        // target the combobox/control wrapper rather than the inner <input>.
+        "[role='combobox']",
+        "[aria-haspopup='listbox']",
+        ".react-select__control",
+        "[class*='Select__control']",
+        "[class*='react-select']",
+    ].join(",");
+
     function isEditableTarget(target) {
-        if (!(target instanceof Element)) return false;
-        if (target.closest("input, textarea, select")) return true;
-        if (target.closest("[contenteditable='true'], [contenteditable=''], [contenteditable='plaintext-only']")) return true;
-        if (target.closest(".CodeMirror, .cm-editor")) return true;
+        const t = target instanceof Element ? target : null;
+        const a = document.activeElement instanceof Element ? document.activeElement : null;
+
+        if (t && (t.matches(EDITABLE_SELECTOR) || t.closest(EDITABLE_SELECTOR))) return true;
+        if (a && (a.matches(EDITABLE_SELECTOR) || a.closest(EDITABLE_SELECTOR))) return true;
         return false;
     }
 

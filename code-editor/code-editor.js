@@ -7,8 +7,7 @@
 
     function setNativeTextareaValue(textarea, value) {
         const proto = Object.getPrototypeOf(textarea);
-        const desc = Object.getOwnPropertyDescriptor(proto, 'value') ||
-            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+        const desc = Object.getOwnPropertyDescriptor(proto, 'value') || Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
         const setter = desc && desc.set;
         if (setter) {
             setter.call(textarea, value);
@@ -218,11 +217,9 @@
                     dialog.querySelectorAll('textarea[data-code-mirror-init="true"]').forEach((ta) => {
                         const ed = editorsByTextarea.get(ta);
                         if (ed) {
-                            try {
-                                const val = ed.getValue();
-                                setNativeTextareaValue(ta, val);
-                                fireInputAndChange(ta);
-                            } catch {}
+                            const val = ed.getValue();
+                            setNativeTextareaValue(ta, val);
+                            fireInputAndChange(ta);
                         }
                     });
                 };
@@ -234,9 +231,7 @@
                 dialog.addEventListener('click', (e) => {
                     const el = e.target;
                     if (!(el instanceof Element)) return;
-                    const isConfirm =
-                        el.matches('button.btn-primary, button[type="submit"]') ||
-                        (el.textContent || '').trim().toLowerCase() === 'confirm';
+                    const isConfirm = el.matches('button.btn-primary, button[type="submit"]') || (el.textContent || '').trim().toLowerCase() === 'confirm';
                     if (isConfirm) {
                         syncAllInDialog();
                     }
@@ -336,11 +331,7 @@
             // console.log('[CodeEditor] CodeMirror found! Version:', window.CodeMirror.version || 'unknown');
             
             const observer = new MutationObserver((mutations) => {
-                const hasNewTextareas = mutations.some(mutation => 
-                    Array.from(mutation.addedNodes).some(node => 
-                        node.nodeType === 1 && (node.matches?.('textarea') || node.querySelector?.('textarea'))
-                    )
-                );
+                const hasNewTextareas = mutations.some(mutation => Array.from(mutation.addedNodes).some(node => node.nodeType === 1 && (node.matches?.('textarea') || node.querySelector?.('textarea'))));
                 
                 if (hasNewTextareas) {
                     console.log('[CodeEditor] New textareas detected in DOM');

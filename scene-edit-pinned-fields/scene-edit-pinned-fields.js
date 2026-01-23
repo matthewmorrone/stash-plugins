@@ -6,7 +6,7 @@
     let activeAttemptToken = 0;
     let lastSceneKey = null;
 
-    const STORE_KEY = "scene_edit_pins_v1";
+    const STORE_KEY = "scene_edit_pins";
     const STYLE_ID = "scene-edit-pins-style";
 
     // Per-scene stable ordering so unpinning returns to normal order.
@@ -84,7 +84,6 @@
         const pinned = parsed && typeof parsed === "object" && parsed.pinned && typeof parsed.pinned === "object" ? parsed.pinned : {};
         const initialized = Boolean(parsed && typeof parsed === "object" && parsed.initialized === true);
         return {
-            version: 1,
             initialized,
             pinned,
         };

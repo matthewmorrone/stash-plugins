@@ -12,7 +12,7 @@
 
     if (!isDuplicateCheckerPage()) return;
 
-    const STORE_KEY = "scene_duplicate_checker_tools_v1";
+    const STORE_KEY = "scene_duplicate_checker_tools";
     const STYLE_ID = "cene-duplicate-checker-tools-style";
 
     const STORE_CHANGED_EVENT = "scene_duplicate_checker_tools_changed";
@@ -35,7 +35,6 @@
 
     function defaultStore() {
         return {
-            version: 1,
             // confirmed pairs (for UI), plus group assignment for more than just a generic tag
             confirmedPairs: {}, // key -> {key,a,b,groupId,createdAt,updatedAt,reason?}
             ignoredPairs: {}, // key -> {key,a,b,createdAt,updatedAt,reason?}
@@ -455,14 +454,10 @@
 
             const btnExport = createEl("button", { className: "sdct-btn", attrs: { type: "button" }, text: "Export" });
             btnExport.addEventListener("click", async () => {
-                try {
-                    const s = loadStore();
-                    await navigator.clipboard.writeText(JSON.stringify(s, null, 2));
-                    btnExport.textContent = "Copied";
-                    setTimeout(() => (btnExport.textContent = "Export"), 1000);
-                } catch {
-                    // ignore
-                }
+                const s = loadStore();
+                await navigator.clipboard.writeText(JSON.stringify(s, null, 2));
+                btnExport.textContent = "Copied";
+                setTimeout(() => (btnExport.textContent = "Export"), 1000);
             });
             row.appendChild(btnExport);
 
@@ -562,12 +557,9 @@
         const btnOpen = createEl("button", { className: "sdct-btn", attrs: { type: "button" }, text: "Open both" });
         btnOpen.addEventListener("click", (e) => {
             e.preventDefault();
-            try {
-                window.open(sceneUrl(a), "_blank", "noopener,noreferrer");
-                window.open(sceneUrl(b), "_blank", "noopener,noreferrer");
-            } catch {
-                // ignore
-            }
+
+            window.open(sceneUrl(a), "_blank", "noopener,noreferrer");
+            window.open(sceneUrl(b), "_blank", "noopener,noreferrer");
         });
         inline.appendChild(btnOpen);
 

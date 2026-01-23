@@ -5,7 +5,7 @@
     if (window[INSTALL_FLAG]) return;
     window[INSTALL_FLAG] = true;
 
-    const STORE_KEY = "configurable_keybindings_v1";
+    const STORE_KEY = "configurable_keybindings";
 
     const STYLE_ID = "configurable-keybindings-style";
 
@@ -181,7 +181,6 @@
 
     function defaultStore() {
         return {
-            version: 1,
             frameStepSeconds: 1 / 30,
             seekSeconds: 5,
             rateStep: 0.25,
@@ -286,25 +285,13 @@
         const wasPaused = video.paused;
 
         if (pauseAfter && !video.paused) {
-            try {
-                video.pause();
-            } catch {
-                // ignore
-            }
+            video.pause();
         }
 
-        try {
-            video.currentTime = next;
-        } catch {
-            // ignore
-        }
+        video.currentTime = next;
 
         if (pauseAfter || wasPaused) {
-            try {
-                video.pause();
-            } catch {
-                // ignore
-            }
+            video.pause();
         }
     }
 
@@ -315,9 +302,7 @@
             return;
         }
         if (video.paused) {
-            video.play?.().catch(() => {
-                // ignore
-            });
+            video.play?.().catch(() => {});
         } else {
             video.pause?.();
         }

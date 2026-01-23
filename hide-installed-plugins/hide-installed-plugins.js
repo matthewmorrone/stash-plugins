@@ -107,9 +107,7 @@
     function bestNameFromItem(itemEl) {
         if (!(itemEl instanceof Element)) return "";
 
-        const candidates = Array.from(
-            itemEl.querySelectorAll("h1, h2, h3, h4, h5, h6, .card-title, strong")
-        ).filter(isProbablyVisible);
+        const candidates = Array.from(itemEl.querySelectorAll("h1, h2, h3, h4, h5, h6, .card-title, strong")).filter(isProbablyVisible);
 
         for (const el of candidates) {
             const t = normalizeText(el.textContent);
@@ -264,21 +262,13 @@
         }
     }
 
-    function applyOnceSafe() {
-        try {
-            applyOnce();
-        } catch {
-            // Never break the settings UI.
-        }
-    }
-
     let scheduled = false;
     function scheduleApply() {
         if (scheduled) return;
         scheduled = true;
         setTimeout(() => {
             scheduled = false;
-            applyOnceSafe();
+            applyOnce();
         }, DEBOUNCE_MS);
     }
 
@@ -300,7 +290,7 @@
         // IMPORTANT: do NOT observe attributes. This plugin mutates style/data-* attributes;
         // observing attributes causes self-triggered loops/thrashing.
         if (document.body) observer.observe(document.body, { subtree: true, childList: true });
-        applyOnceSafe();
+        applyOnce();
     }
 
     function emitLocationChange() {

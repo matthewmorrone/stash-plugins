@@ -8,9 +8,8 @@
     const STYLE_ID = "sppd-scene-performer-pair-data-style";
     const ROOT_ATTR = "data-sppd-root";
 
-    const STORAGE_KEY_V1 = "__scene_performer_pair_data_v1__"; // legacy 1/2/3 store
-    const STORAGE_KEY_V2 = "__scene_performer_roles_v2__"; // current roles store
-    const UI_PREF_KEY = "__scene_performer_roles_ui_v1__";
+    const STORAGE_KEY = "__scene_performer_roles__";
+    const UI_PREF_KEY = "__scene_performer_roles_ui__";
     const STORE_CHANGED_EVENT = "spr-store-changed";
 
     const ROLE_INITIATOR = "initiator";
@@ -259,11 +258,10 @@
         return out;
     }
 
-    function normalizeStoreV2(raw) {
+    function normalizeStore(raw) {
         if (!raw || typeof raw !== "object") return null;
-        if (raw.v !== 2) return null;
         const scenes = raw.scenes;
-        if (!scenes || typeof scenes !== "object") return { v: 2, scenes: {} };
+        if (!scenes || typeof scenes !== "object") return { scenes: {} };
         // Ensure roles are arrays.
         const outScenes = {};
         for (const [sceneId, perScene] of Object.entries(scenes)) {
@@ -278,45 +276,16 @@
             if (Object.keys(outPerScene).length === 0) continue;
             outScenes[sceneId] = outPerScene;
         }
-        return { v: 2, scenes: outScenes };
-    }
-
-    function migrateV1ToV2IfNeeded() {
-        const existingV2 = normalizeStoreV2(safeJsonParse(localStorage.getItem(STORAGE_KEY_V2), null));
-        if (existingV2) return existingV2;
-
-        const v1 = safeJsonParse(localStorage.getItem(STORAGE_KEY_V1), null);
-        if (!v1 || typeof v1 !== "object") return { v: 2, scenes: {} };
-
-        const scenes = {};
-        for (const [sceneId, perScene] of Object.entries(v1)) {
-            if (!perScene || typeof perScene !== "object") continue;
-            const outPerScene = {};
-            for (const [performerId, value] of Object.entries(perScene)) {
-                const n = Number(value);
-                const roles = [];
-                if (n === 1 || n === 3) roles.push(ROLE_INITIATOR);
-                if (n === 2 || n === 3) roles.push(ROLE_RECEIVER);
-                if (roles.length === 0) continue;
-                outPerScene[performerId] = { roles };
-            }
-            if (Object.keys(outPerScene).length === 0) continue;
-            scenes[sceneId] = outPerScene;
-        }
-
-        const migrated = { v: 2, scenes };
-        localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(migrated));
-        return migrated;
+        return { scenes: outScenes };
     }
 
     function loadStore() {
-        const migratedOrExisting = migrateV1ToV2IfNeeded();
-        return migratedOrExisting;
+        return normalizeStore(safeJsonParse(localStorage.getItem(STORAGE_KEY), null)) || { scenes: {} };
     }
 
     function saveStore(store) {
-        const normalized = normalizeStoreV2(store) || { v: 2, scenes: {} };
-        localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(normalized));
+        const normalized = normalizeStore(store) || { scenes: {} };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     }
 
     function loadUiPrefs() {
@@ -547,35 +516,11 @@
         });
 
         function mergeStores(base, incoming) {
-            const baseNorm = normalizeStoreV2(base) || { v: 2, scenes: {} };
-            const inNorm = normalizeStoreV2(incoming);
-            if (!inNorm) {
-                // Also accept legacy v1 import shape: { [sceneId]: { [performerId]: 1|2|3 } }
-                const migrated = (function () {
-                    if (!incoming || typeof incoming !== "object") return null;
-                    if (incoming.v === 2) return null;
-                    const scenes = {};
-                    for (const [sceneId, perScene] of Object.entries(incoming)) {
-                        if (!perScene || typeof perScene !== "object") continue;
-                        const outPerScene = {};
-                        for (const [performerId, value] of Object.entries(perScene)) {
-                            const n = Number(value);
-                            const roles = [];
-                            if (n === 1 || n === 3) roles.push(ROLE_INITIATOR);
-                            if (n === 2 || n === 3) roles.push(ROLE_RECEIVER);
-                            if (roles.length === 0) continue;
-                            outPerScene[performerId] = { roles };
-                        }
-                        if (Object.keys(outPerScene).length === 0) continue;
-                        scenes[sceneId] = outPerScene;
-                    }
-                    return { v: 2, scenes };
-                })();
-                if (!migrated) return baseNorm;
-                return mergeStores(baseNorm, migrated);
-            }
+            const baseNorm = normalizeStore(base) || { scenes: {} };
+            const inNorm = normalizeStore(incoming);
+            if (!inNorm) return baseNorm;
 
-            const out = { v: 2, scenes: { ...baseNorm.scenes } };
+            const out = { scenes: { ...baseNorm.scenes } };
             for (const [sceneId, perScene] of Object.entries(inNorm.scenes || {})) {
                 if (!out.scenes[sceneId] || typeof out.scenes[sceneId] !== "object") out.scenes[sceneId] = {};
                 for (const [performerId, entry] of Object.entries(perScene || {})) {
@@ -595,9 +540,19 @@
                     setStatus("Invalid JSON.");
                     return false;
                 }
-                const next = replace ? (normalizeStoreV2(incoming) || mergeStores({ v: 2, scenes: {} }, incoming)) : mergeStores(loadStore(), incoming);
-                saveStore(next);
-                setStatus(replace ? "Replaced store." : "Merged into store.");
+                const normalized = normalizeStore(incoming);
+                if (replace) {
+                    if (!normalized) {
+                        setStatus("Invalid store shape.");
+                        return false;
+                    }
+                    saveStore(normalized);
+                    setStatus("Replaced store.");
+                } else {
+                    const next = mergeStores(loadStore(), incoming);
+                    saveStore(next);
+                    setStatus("Merged into store.");
+                }
                 window.dispatchEvent(new Event(STORE_CHANGED_EVENT));
                 return true;
             } catch (e) {
@@ -715,13 +670,11 @@
         if (!performerId) return;
 
         const anchors = Array.from(
-            document.querySelectorAll(
-                [
-                    `a[href="/performers/${performerId}"]`,
-                    `a[href^="/performers/${performerId}?"]`,
-                    `a[href^="/performers/${performerId}/"]`,
-                ].join(",")
-            )
+            document.querySelectorAll([
+                `a[href="/performers/${performerId}"]`,
+                `a[href^="/performers/${performerId}?"]`,
+                `a[href^="/performers/${performerId}/"]`,
+            ].join(","))
         );
 
         for (const a of anchors) {
@@ -871,7 +824,7 @@
 
     // Re-render if another tab/import updates storage.
     window.addEventListener("storage", (e) => {
-        if (e?.key !== STORAGE_KEY_V2 && e?.key !== STORAGE_KEY_V1) return;
+        if (e?.key !== STORAGE_KEY) return;
         const sceneId = getSceneIdFromLocation();
         if (!sceneId) return;
         refreshIfOnScene();

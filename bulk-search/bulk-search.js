@@ -10,7 +10,7 @@
             !b.disabled
         );
 
-        console.log(`Bulk Search: ${buttons.length} found`);
+        // console.log(`Bulk Search: ${buttons.length} found`);
 
         for (const b of buttons) {
             b.click();

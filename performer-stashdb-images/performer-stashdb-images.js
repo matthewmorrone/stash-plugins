@@ -7,7 +7,7 @@
 
     const STYLE_ID = "performer-stashdb-images-style";
     const STASHDB_ENDPOINT = "https://stashdb.org/graphql";
-    const STORE_KEY = "performer_stashdb_images_choice_v1";
+    const STORE_KEY = "performer_stashdb_images_choice";
 
     function ensureStyles() {
         if (document.getElementById(STYLE_ID)) return;
@@ -163,11 +163,7 @@
     }
 
     function saveChoiceStore(store) {
-        try {
-            localStorage.setItem(STORE_KEY, JSON.stringify(store || {}));
-        } catch {
-            // ignore
-        }
+        localStorage.setItem(STORE_KEY, JSON.stringify(store || {}));
     }
 
     function loadSavedUrlForPerformer(performerId) {
@@ -246,11 +242,7 @@
 
     function findBestLightboxTarget() {
         const candidates = [];
-        const roots = Array.from(
-            document.querySelectorAll(
-                "[aria-modal='true'], [role='dialog'], .modal.show, .modal[style*='display'], .ReactModal__Overlay, .lightbox"
-            )
-        ).filter(isProbablyVisible);
+        const roots = Array.from(document.querySelectorAll("[aria-modal='true'], [role='dialog'], .modal.show, .modal[style*='display'], .ReactModal__Overlay, .lightbox")).filter(isProbablyVisible);
 
         for (const root of roots) {
             const imgs = Array.from(root.querySelectorAll("img")).filter((img) => img instanceof HTMLImageElement);
@@ -282,25 +274,17 @@
         const u = String(url || "").trim();
         if (!u) return;
         if (target.kind === "img") {
-            // Clear srcset so the browser/app doesn't prefer a stale candidate.
-            try {
-                target.el.removeAttribute("srcset");
-                target.el.srcset = "";
-            } catch {
-                // ignore
-            }
+            target.el.removeAttribute("srcset");
+            target.el.srcset = "";
 
             target.el.src = u;
 
             // Some lightbox implementations read these instead of `src`.
-            try {
-                if (target.el.hasAttribute("data-src")) target.el.setAttribute("data-src", u);
-                if (target.el.hasAttribute("data-original")) target.el.setAttribute("data-original", u);
-                if (target.el.hasAttribute("data-full")) target.el.setAttribute("data-full", u);
-                if (target.el.hasAttribute("data-full-src")) target.el.setAttribute("data-full-src", u);
-            } catch {
-                // ignore
-            }
+            if (target.el.hasAttribute("data-src")) target.el.setAttribute("data-src", u);
+            if (target.el.hasAttribute("data-original")) target.el.setAttribute("data-original", u);
+            if (target.el.hasAttribute("data-full")) target.el.setAttribute("data-full", u);
+            if (target.el.hasAttribute("data-full-src")) target.el.setAttribute("data-full-src", u);
+
             return;
         }
         target.el.style.backgroundImage = `url("${u.replaceAll('"', "\\\"")}")`;
@@ -316,23 +300,16 @@
         // Common pattern: <a href="full.jpg"><img ... /></a>
         const a = targetEl.closest("a[href]");
         if (a) {
-            try {
-                a.setAttribute("href", u);
-            } catch {
-                // ignore
-            }
+            a.setAttribute("href", u);
         }
 
         // Some lightboxes key off data-* on the clickable element.
         const el = a || targetEl;
-        try {
-            if (el.hasAttribute("data-src")) el.setAttribute("data-src", u);
-            if (el.hasAttribute("data-original")) el.setAttribute("data-original", u);
-            if (el.hasAttribute("data-full")) el.setAttribute("data-full", u);
-            if (el.hasAttribute("data-full-src")) el.setAttribute("data-full-src", u);
-        } catch {
-            // ignore
-        }
+
+        if (el.hasAttribute("data-src")) el.setAttribute("data-src", u);
+        if (el.hasAttribute("data-original")) el.setAttribute("data-original", u);
+        if (el.hasAttribute("data-full")) el.setAttribute("data-full", u);
+        if (el.hasAttribute("data-full-src")) el.setAttribute("data-full-src", u);
     }
 
     async function fetchPerformerBasics(performerId) {
@@ -506,17 +483,9 @@
     };
 
     function teardownUi() {
-        try {
-            if (current.heroOverlayEl) current.heroOverlayEl.remove();
-        } catch {
-            // ignore
-        }
+        if (current.heroOverlayEl) current.heroOverlayEl.remove();
 
-        try {
-            if (current.lightboxOverlayEl) current.lightboxOverlayEl.remove();
-        } catch {
-            // ignore
-        }
+        if (current.lightboxOverlayEl) current.lightboxOverlayEl.remove();
 
         current.heroOverlayEl = null;
         current.heroWrapEl = null;
@@ -729,24 +698,20 @@
         // Intercept clicks on the hero image and open our modal so it always
         // shows the *currently selected* URL (Stash's lightbox can be driven by
         // React state and ignore our DOM src/href updates).
-        try {
-            if (!current.heroClickHooked) {
-                current.heroClickHooked = true;
-                target.el.addEventListener(
-                    "click",
-                    (e) => {
-                        if (!current.images.length) return;
-                        // Allow user to open in new tab/window.
-                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openModal();
-                    },
-                    true
-                );
-            }
-        } catch {
-            // ignore
+        if (!current.heroClickHooked) {
+            current.heroClickHooked = true;
+            target.el.addEventListener(
+                "click",
+                (e) => {
+                    if (!current.images.length) return;
+                    // Allow user to open in new tab/window.
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openModal();
+                },
+                true
+            );
         }
 
         // Initial selection: persisted URL > current URL > index 0
@@ -763,11 +728,7 @@
     }
 
     function teardownLightboxUi() {
-        try {
-            if (current.lightboxOverlayEl) current.lightboxOverlayEl.remove();
-        } catch {
-            // ignore
-        }
+        if (current.lightboxOverlayEl) current.lightboxOverlayEl.remove();
         current.lightboxOverlayEl = null;
         current.lightboxWrapEl = null;
         current.lightboxTarget = null;

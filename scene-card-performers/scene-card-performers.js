@@ -39,18 +39,10 @@
             return;
         }
 
-        try {
-            panel.__scpClosePanel?.();
-        } catch {
-            // ignore
-        }
+        panel.__scpClosePanel?.();
 
         if (blur) {
-            try {
-                panel.__scpInputEl?.blur?.();
-            } catch {
-                // ignore
-            }
+            panel.__scpInputEl?.blur?.();
         }
 
         // If it stayed open for any reason, keep it as active.
@@ -548,10 +540,9 @@
             const name = String(details?.name || "").trim() || "(unnamed)";
             const imgUrl = resolveImageUrl(details?.image_path);
             const sceneCount = details?.scene_count;
-            const sceneLine =
-                typeof sceneCount === "number" || (typeof sceneCount === "string" && String(sceneCount).trim() !== "")
-                    ? `Scenes: ${sceneCount}`
-                    : "";
+            const sceneLine = typeof sceneCount === "number" || (typeof sceneCount === "string" && String(sceneCount).trim() !== "")
+                ? `Scenes: ${sceneCount}`
+                : "";
 
             const performerHref = `/performers/${encodeURIComponent(String(performerId))}`;
 
@@ -693,9 +684,7 @@
 
         const variables = {
             tag_filter: q
-                ? {
-                      name: { value: q, modifier: "INCLUDES" },
-                  }
+                ? { name: { value: q, modifier: "INCLUDES" } }
                 : null,
             filter: {
                 per_page: q ? 10 : 50,
@@ -800,9 +789,7 @@
             // Back-compat fallback: if the server doesn't accept `gender` on create,
             // retry without it so the feature still works.
             const msg = String(err?.message || err);
-            const looksLikeGenderUnsupported =
-                /\bgender\b/i.test(msg) &&
-                /(unknown|not defined|cannot query|field|argument|input)/i.test(msg);
+            const looksLikeGenderUnsupported = /\bgender\b/i.test(msg) && /(unknown|not defined|cannot query|field|argument|input)/i.test(msg);
 
             if (!looksLikeGenderUnsupported) throw err;
 
@@ -874,22 +861,13 @@
         if (!id || !(container instanceof Element)) return;
         const set = sceneContainersById.get(id);
         if (!set) return;
-        try {
-            set.delete(container);
-        } catch {
-            // ignore
-        }
+        set.delete(container);
         if (!set.size) sceneContainersById.delete(id);
     }
 
     function getPreferredMountParent(cardEl) {
         if (!(cardEl instanceof Element)) return cardEl;
-        return (
-            cardEl.querySelector(".card-footer") ||
-            cardEl.querySelector(".card-body") ||
-            cardEl.querySelector("[class*='CardBody']") ||
-            cardEl
-        );
+        return ( cardEl.querySelector(".card-footer") || cardEl.querySelector(".card-body") || cardEl.querySelector("[class*='CardBody']") || cardEl );
     }
 
     function findVisualCardElement(containerEl, sceneId) {
@@ -1176,14 +1154,10 @@
             addBtn.style.display = "none";
             setActivePanel(panel);
 
-            try {
-                const input = panel.querySelector("input");
-                if (input) {
-                    input.value = "";
-                    setTimeout(() => input.focus(), 0);
-                }
-            } catch {
-                // ignore
+            const input = panel.querySelector("input");
+            if (input) {
+                input.value = "";
+                setTimeout(() => input.focus(), 0);
             }
         });
 
@@ -1198,10 +1172,8 @@
         const tags = Array.isArray(scene?.tags) ? scene.tags : [];
 
         // Preserve search panel open states.
-        const wasPerformerOpen =
-            container.querySelector("[data-scp-search-panel][data-scp-entity='performer']")?.dataset?.open === "true";
-        const wasTagOpen =
-            container.querySelector("[data-scp-search-panel][data-scp-entity='tag']")?.dataset?.open === "true";
+        const wasPerformerOpen = container.querySelector("[data-scp-search-panel][data-scp-entity='performer']")?.dataset?.open === "true";
+        const wasTagOpen = container.querySelector("[data-scp-search-panel][data-scp-entity='tag']")?.dataset?.open === "true";
 
         container.innerHTML = "";
 
@@ -1345,18 +1317,10 @@
 
             if (scpActivePanel === panel) scpActivePanel = null;
 
-            try {
-                onClose?.();
-            } catch {
-                // ignore
-            }
+            onClose?.();
 
             // Tear down overlay element.
-            try {
-                if (dropdown && dropdown.isConnected) dropdown.remove();
-            } catch {
-                // ignore
-            }
+            if (dropdown && dropdown.isConnected) dropdown.remove();
         }
 
         // Let global handlers close/blur the currently open panel.
@@ -1369,11 +1333,7 @@
             if (panel.dataset.open === "true") setActivePanel(panel);
             // For tags, prefill suggestions even when blank so the dropdown can show.
             if (panel.dataset.open === "true" && type === "tag") {
-                try {
-                    refreshCandidatesNow("");
-                } catch {
-                    // ignore
-                }
+                refreshCandidatesNow("");
             }
         });
 
@@ -1682,11 +1642,8 @@
         const cardScopeEl = findVisualCardElement(cardEl, sceneId) || cardEl;
 
         // Mark the card so our alignment CSS can be scoped safely.
-        try {
-            cardScopeEl.classList.add("scp-card");
-        } catch {
-            // ignore
-        }
+        cardScopeEl.classList.add("scp-card");
+
         const preferredParent = getPreferredMountParent(cardScopeEl);
 
         // If we already injected, ensure it's in the right place and dedupe.
@@ -1706,19 +1663,11 @@
             for (const m of existingMounts) {
                 if (m === keep) continue;
                 unregisterContainer(sceneId, m);
-                try {
-                    m.remove();
-                } catch {
-                    // ignore
-                }
+                m.remove();
             }
 
             // Ensure attributes + placement.
-            try {
-                keep.setAttribute("data-scp-scene-id", String(sceneId));
-            } catch {
-                // ignore
-            }
+            keep.setAttribute("data-scp-scene-id", String(sceneId));
 
             if (preferredParent && keep.parentElement !== preferredParent) {
                 preferredParent.appendChild(keep);

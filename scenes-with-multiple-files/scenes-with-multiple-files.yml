@@ -1,0 +1,7 @@
+name: Scenes With Multiple Files
+description: Shows scenes that have more than one file in the Scene Duplicate Checker
+version: 0.1.0
+url: https://github.com/matthewmorrone/stash-plugins
+ui:
+  javascript:
+    - scenes-with-multiple-files.js

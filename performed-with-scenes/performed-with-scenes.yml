@@ -1,0 +1,7 @@
+name: Performed With Scenes
+description: Shows the shared scenes for each performer in the "Performed With" section on performer pages
+version: 0.1.0
+url: https://github.com/matthewmorrone/stash-plugins
+ui:
+  javascript:
+    - performed-with-scenes.js

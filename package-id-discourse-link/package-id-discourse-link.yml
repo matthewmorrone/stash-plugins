@@ -1,0 +1,7 @@
+name: Package ID Discourse Link
+description: Converts .package-id into a Discourse thread link in each .package-cell
+version: 0.1.0
+url: https://github.com/matthewmorrone/stash-plugins
+ui:
+  javascript:
+    - package-id-discourse-link.js

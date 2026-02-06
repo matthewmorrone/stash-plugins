@@ -334,7 +334,7 @@
                 const hasNewTextareas = mutations.some(mutation => Array.from(mutation.addedNodes).some(node => node.nodeType === 1 && (node.matches?.('textarea') || node.querySelector?.('textarea'))));
                 
                 if (hasNewTextareas) {
-                    console.log('[CodeEditor] New textareas detected in DOM');
+                    // console.log('[CodeEditor] New textareas detected in DOM');
                     debouncedCheck();
                 }
             });

@@ -1,0 +1,18 @@
+name: Quick Sentiment
+description: Adds favorite and watch later overlays to scene cards
+url: https://github.com/matthewmorrone/stash-plugins
+version: 1.0
+ui:
+  javascript:
+  - quick-sentiment.js
+  css:
+  - quick-sentiment.css
+
+settings:
+  favouriteTag:
+    displayName: Favourite Tag (ID or Name)
+    type: STRING
+  watchLaterTag:
+    displayName: Watch Later Tag (ID or Name)
+    type: STRING
+

@@ -44,8 +44,11 @@ Adds configurable keyboard shortcuts for the video player (includes frame-step v
 ### Hide Installed Plugins
 Hides already-installed plugins from the Available Plugins list; they reappear after uninstall.
 
+### Package ID Discourse Link
+Converts `.package-id` into a link to `https://discourse.stashapp.cc/t/{id}` (opens in a new tab).
+
 ### Scene Performer Roles
 Adds small role icons to performer cards on scene pages; stores neutral per-scene/per-performer roles in your browser.
 
-### Scene Duplicate Checker Tools
-Enhances `/sceneDuplicateChecker` with Confirm/Ignore controls and optional duplicate-group tagging.
+### Scene Duplicate Checker Multi-File
+Enhances `/sceneDuplicateChecker` by listing each scene's files inline when a scene has multiple files.

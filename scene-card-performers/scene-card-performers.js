@@ -259,6 +259,33 @@
                 background: rgba(255, 255, 255, 0.10);
             }
 
+            /* Autocomplete status + create affordance */
+            [${SCP_ROOT_ATTR}] .scp-search-status {
+                margin-left: 6px;
+                font-size: 0.7rem;
+                line-height: 1;
+                opacity: 0.75;
+                white-space: nowrap;
+                user-select: none;
+            }
+
+            .scp-search-dropdown-status {
+                padding: 6px 8px;
+                font-size: 0.75rem;
+                line-height: 1.1;
+                opacity: 0.75;
+            }
+
+            .scp-search-dropdown-sep {
+                height: 1px;
+                margin: 4px 6px;
+                background: rgba(255, 255, 255, 0.10);
+            }
+
+            .scp-search-dropdown-item.scp-search-dropdown-item--create {
+                font-weight: 600;
+            }
+
             .scp-performer-popover a {
                 color: inherit;
                 text-decoration: none;
@@ -595,6 +622,23 @@
         return json.data;
     }
 
+    async function gqlWithOptions(query, variables, options) {
+        const signal = options?.signal;
+        const response = await fetch("/graphql", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, variables }),
+            signal,
+        });
+
+        const json = await response.json();
+        if (json.errors && json.errors.length) {
+            const msg = json.errors.map((e) => e.message).filter(Boolean).join("; ");
+            throw new Error(msg || "GraphQL error");
+        }
+        return json.data;
+    }
+
     async function fetchScene(sceneId) {
         if (!sceneId) return null;
         if (sceneCache.has(sceneId)) return sceneCache.get(sceneId);
@@ -637,7 +681,7 @@
         }
     }
 
-    async function searchPerformersByName(queryText) {
+    async function searchPerformersByName(queryText, options) {
         const q = String(queryText || "").trim();
         if (!q) return [];
 
@@ -657,18 +701,66 @@
                 name: { value: q, modifier: "INCLUDES" },
             },
             filter: {
-                per_page: 10,
+                per_page: typeof options?.perPage === "number" ? options.perPage : 25,
                 sort: "name",
                 direction: "ASC",
             },
         };
 
-        const data = await gql(query, variables);
+        const data = options?.signal ? await gqlWithOptions(query, variables, { signal: options.signal }) : await gql(query, variables);
         const performers = data?.findPerformers?.performers;
         return Array.isArray(performers) ? performers : [];
     }
 
-    async function searchTagsByName(queryText) {
+    async function searchPerformerExactByName(name, options) {
+        const q = String(name || "").trim();
+        if (!q) return null;
+
+        const query = `
+            query FindPerformersExact($performer_filter: PerformerFilterType, $filter: FindFilterType) {
+                findPerformers(performer_filter: $performer_filter, filter: $filter) {
+                    performers {
+                        id
+                        name
+                    }
+                }
+            }
+        `;
+
+        // Prefer EQUALS so we can reliably prevent duplicate creates.
+        const variablesEquals = {
+            performer_filter: {
+                name: { value: q, modifier: "EQUALS" },
+            },
+            filter: {
+                per_page: 2,
+                sort: "name",
+                direction: "ASC",
+            },
+        };
+
+        try {
+            const data = options?.signal
+                ? await gqlWithOptions(query, variablesEquals, { signal: options.signal })
+                : await gql(query, variablesEquals);
+            const performers = data?.findPerformers?.performers;
+            const list = Array.isArray(performers) ? performers : [];
+            const needle = q.trim().toLowerCase();
+            const hit = list.find((p) => String(p?.name || "").trim().toLowerCase() === needle);
+            return hit?.id ? { id: String(hit.id), name: String(hit?.name || "") } : null;
+        } catch (err) {
+            // Back-compat: if EQUALS modifier isn't supported, fall back to INCLUDES and filter client-side.
+            const msg = String(err?.message || err);
+            const looksLikeFilterUnsupported = /(unknown|not defined|cannot query|field|argument|input|enum)/i.test(msg);
+            if (!looksLikeFilterUnsupported) throw err;
+            const list = await searchPerformersByName(q, { perPage: 100, signal: options?.signal });
+            const needle = q.trim().toLowerCase();
+            const hit = list.find((p) => String(p?.name || "").trim().toLowerCase() === needle);
+            return hit?.id ? { id: String(hit.id), name: String(hit?.name || "") } : null;
+        }
+    }
+
+    async function searchTagsByName(queryText, options) {
         const q = String(queryText || "").trim();
 
         const query = `
@@ -687,15 +779,59 @@
                 ? { name: { value: q, modifier: "INCLUDES" } }
                 : null,
             filter: {
-                per_page: q ? 10 : 50,
+                per_page: typeof options?.perPage === "number" ? options.perPage : q ? 25 : 50,
                 sort: "name",
                 direction: "ASC",
             },
         };
 
-        const data = await gql(query, variables);
+        const data = options?.signal ? await gqlWithOptions(query, variables, { signal: options.signal }) : await gql(query, variables);
         const tags = data?.findTags?.tags;
         return Array.isArray(tags) ? tags : [];
+    }
+
+    async function searchTagExactByName(name, options) {
+        const q = String(name || "").trim();
+        if (!q) return null;
+
+        const query = `
+            query FindTagsExact($tag_filter: TagFilterType, $filter: FindFilterType) {
+                findTags(tag_filter: $tag_filter, filter: $filter) {
+                    tags {
+                        id
+                        name
+                    }
+                }
+            }
+        `;
+
+        const variablesEquals = {
+            tag_filter: { name: { value: q, modifier: "EQUALS" } },
+            filter: {
+                per_page: 2,
+                sort: "name",
+                direction: "ASC",
+            },
+        };
+
+        try {
+            const data = options?.signal
+                ? await gqlWithOptions(query, variablesEquals, { signal: options.signal })
+                : await gql(query, variablesEquals);
+            const tags = data?.findTags?.tags;
+            const list = Array.isArray(tags) ? tags : [];
+            const needle = q.trim().toLowerCase();
+            const hit = list.find((t) => String(t?.name || "").trim().toLowerCase() === needle);
+            return hit?.id ? { id: String(hit.id), name: String(hit?.name || "") } : null;
+        } catch (err) {
+            const msg = String(err?.message || err);
+            const looksLikeFilterUnsupported = /(unknown|not defined|cannot query|field|argument|input|enum)/i.test(msg);
+            if (!looksLikeFilterUnsupported) throw err;
+            const list = await searchTagsByName(q, { perPage: 100, signal: options?.signal });
+            const needle = q.trim().toLowerCase();
+            const hit = list.find((t) => String(t?.name || "").trim().toLowerCase() === needle);
+            return hit?.id ? { id: String(hit.id), name: String(hit?.name || "") } : null;
+        }
     }
 
     async function updateScenePerformers(sceneId, performerIds) {
@@ -1175,6 +1311,17 @@
         const wasPerformerOpen = container.querySelector("[data-scp-search-panel][data-scp-entity='performer']")?.dataset?.open === "true";
         const wasTagOpen = container.querySelector("[data-scp-search-panel][data-scp-entity='tag']")?.dataset?.open === "true";
 
+        // Tear down any existing floating dropdown overlays before wiping the container.
+        // (The dropdown is attached to <body>, so container.innerHTML='' would otherwise leak it.)
+        try {
+            const oldPanels = Array.from(container.querySelectorAll("[data-scp-search-panel]"));
+            for (const p of oldPanels) {
+                p.__scpDestroyPanel?.();
+            }
+        } catch {
+            // ignore
+        }
+
         container.innerHTML = "";
 
         const performersSection = renderEntitySection({
@@ -1232,6 +1379,12 @@
         });
         panel.appendChild(input);
 
+        const statusEl = createEl("span", {
+            className: "scp-search-status",
+            attrs: { "aria-live": "polite", "aria-atomic": "true" },
+        });
+        panel.appendChild(statusEl);
+
         // Custom dropdown suggestions (rendered as a floating overlay so it can't be clipped)
         const dropdown = createEl("div", {
             className: "scp-search-dropdown",
@@ -1247,8 +1400,35 @@
         let requestToken = 0;
         let lastMatches = [];
         let lastCandidates = []; // filtered results (not already on scene)
+        let lastServerMatches = [];
+        let searchDebounceTimer = 0;
+        let currentSearchController = null;
+        let isSearching = false;
         let suppressBlurSubmit = false;
         let activeIndex = -1;
+
+        function setStatus(text) {
+            statusEl.textContent = String(text || "");
+        }
+
+        function setSearching(v) {
+            isSearching = !!v;
+            if (isSearching) {
+                setStatus("Searching…");
+            } else {
+                // Don't clear immediately; leave the most recent guidance in place.
+            }
+        }
+
+        function normalizeName(s) {
+            return String(s || "").trim().toLowerCase();
+        }
+
+        function filterListByQuery(list, q) {
+            const needle = normalizeName(q);
+            if (!needle) return Array.isArray(list) ? list.slice() : [];
+            return (Array.isArray(list) ? list : []).filter((x) => normalizeName(x?.name).includes(needle));
+        }
 
         function positionDropdown() {
             if (!dropdown || dropdown.dataset.open !== "true") return;
@@ -1314,17 +1494,56 @@
             closeDropdown();
             input.value = "";
             lastQuery = "";
+            lastMatches = [];
+            lastCandidates = [];
+            lastServerMatches = [];
+            setStatus("");
+
+            if (searchDebounceTimer) {
+                clearTimeout(searchDebounceTimer);
+                searchDebounceTimer = 0;
+            }
+            if (currentSearchController) {
+                try {
+                    currentSearchController.abort();
+                } catch {
+                    // ignore
+                }
+                currentSearchController = null;
+            }
+            isSearching = false;
 
             if (scpActivePanel === panel) scpActivePanel = null;
 
             onClose?.();
+        }
 
-            // Tear down overlay element.
-            if (dropdown && dropdown.isConnected) dropdown.remove();
+        function destroyPanel() {
+            // Used when the panel is being removed from the DOM (e.g., rerender).
+            // Close should NOT destroy the overlay, otherwise reopening the same panel instance can't show it again.
+            try {
+                if (searchDebounceTimer) {
+                    clearTimeout(searchDebounceTimer);
+                    searchDebounceTimer = 0;
+                }
+                if (currentSearchController) {
+                    try {
+                        currentSearchController.abort();
+                    } catch {
+                        // ignore
+                    }
+                    currentSearchController = null;
+                }
+                closeDropdown();
+            } finally {
+                if (scpActivePanel === panel) scpActivePanel = null;
+                if (dropdown && dropdown.isConnected) dropdown.remove();
+            }
         }
 
         // Let global handlers close/blur the currently open panel.
         panel.__scpClosePanel = closePanel;
+        panel.__scpDestroyPanel = destroyPanel;
         panel.__scpInputEl = input;
         panel.__scpDropdownEl = dropdown;
 
@@ -1366,8 +1585,23 @@
         async function createAndAddByName(name) {
             const q = String(name || "").trim();
             if (!q) return;
-            const created = await cfg.createByName(q);
-            await addEntityById(created.id);
+            setStatus("Creating…");
+            try {
+                const created = await cfg.createByName(q);
+                await addEntityById(created.id);
+            } catch (err) {
+                const msg = String(err?.message || err);
+                const looksLikeAlreadyExists = /(already exists|duplicate|unique constraint|constraint failed)/i.test(msg);
+                if (!looksLikeAlreadyExists) throw err;
+
+                // Race/limit-safe fallback: resolve exact match and link it.
+                const exact = await findExactMatchRemote(q);
+                if (exact?.id) {
+                    await addEntityById(exact.id);
+                    return;
+                }
+                throw err;
+            }
         }
 
         function findExactMatchId(q) {
@@ -1375,6 +1609,21 @@
             if (!needle) return null;
             const match = (lastMatches || []).find((m) => String(m?.name || "").trim().toLowerCase() === needle);
             return match?.id ? String(match.id) : null;
+        }
+
+        async function findExactMatchRemote(q) {
+            const query = String(q || "").trim();
+            if (!query) return null;
+
+            // Fast path: use current in-memory results.
+            const needle = normalizeName(query);
+            const fromLocal = (lastServerMatches || []).find((m) => normalizeName(m?.name) === needle);
+            if (fromLocal?.id) return { id: String(fromLocal.id), name: String(fromLocal?.name || "") };
+
+            // Remote exact lookup (critical for preventing "already exists" on create).
+            if (type === "performer") return await searchPerformerExactByName(query);
+            if (type === "tag") return await searchTagExactByName(query);
+            return null;
         }
 
         async function trySubmitFromQuery(q, { allowSingleCandidate = true } = {}) {
@@ -1400,13 +1649,46 @@
         function updateDropdownOptions() {
             dropdown.innerHTML = "";
 
-            const items = Array.isArray(lastCandidates) ? lastCandidates.slice(0, 12) : [];
-            if (!items.length || panel.dataset.open !== "true") {
+            if (panel.dataset.open !== "true") {
                 closeDropdown();
                 return;
             }
 
+            const currentQ = String(input.value || "").trim();
+            const items = Array.isArray(lastCandidates) ? lastCandidates.slice(0, 12) : [];
+
             const frag = document.createDocumentFragment();
+
+            // Status header.
+            const statusText = isSearching
+                ? "Searching…"
+                : !currentQ
+                  ? (type === "tag" ? "Type to filter tags" : "Type to search")
+                  : items.length
+                    ? `${items.length} match${items.length === 1 ? "" : "es"}`
+                    : "No matches";
+            frag.appendChild(createEl("div", { className: "scp-search-dropdown-status", text: statusText }));
+
+            // Guidance line.
+            if (currentQ) {
+                frag.appendChild(
+                    createEl("div", {
+                        className: "scp-search-dropdown-status",
+                        text: "",
+                    })
+                );
+            }
+
+            if (!items.length && !currentQ) {
+                dropdown.appendChild(frag);
+                openDropdown();
+                positionDropdown();
+                return;
+            }
+
+            if (items.length) {
+                frag.appendChild(createEl("div", { className: "scp-search-dropdown-sep" }));
+            }
             items.forEach((m, idx) => {
                 const id = m?.id != null ? String(m.id) : "";
                 const name = String(m?.name || "");
@@ -1449,14 +1731,65 @@
 
                 frag.appendChild(btn);
             });
+
+            if (currentQ) {
+                frag.appendChild(createEl("div", { className: "scp-search-dropdown-sep" }));
+                const createBtn = createEl("button", {
+                    className: "scp-search-dropdown-item scp-search-dropdown-item--create",
+                    text: `Create “${currentQ}”`,
+                    attrs: { type: "button", role: "option", "data-scp-create": "1" },
+                });
+
+                createBtn.addEventListener("mousedown", (e) => {
+                    stopCardNavigation(e);
+                    suppressBlurSubmit = true;
+                    e.preventDefault();
+                });
+
+                createBtn.addEventListener("click", async (e) => {
+                    stopCardNavigation(e);
+                    try {
+                        // Safe create: we will still check for exact match first in keydown Enter,
+                        // but for click-to-create we do it here too.
+                        const exact = await findExactMatchRemote(currentQ);
+                        if (exact?.id) {
+                            await addEntityById(exact.id);
+                        } else {
+                            await createAndAddByName(currentQ);
+                        }
+                    } catch (err) {
+                        console.error("[SceneCardPerformers] create failed", err);
+                        showInlineError(panel.closest(`[${SCP_ROOT_ATTR}]`) || panel.parentElement || panel, String(err?.message || err));
+                    } finally {
+                        suppressBlurSubmit = false;
+                        closePanel();
+                        input.blur();
+                    }
+                });
+                frag.appendChild(createBtn);
+            }
+
             dropdown.appendChild(frag);
             openDropdown();
             positionDropdown();
         }
 
+        function cancelPendingSearch() {
+            if (searchDebounceTimer) {
+                clearTimeout(searchDebounceTimer);
+                searchDebounceTimer = 0;
+            }
+        }
+
         async function refreshCandidatesNow(q) {
+            cancelPendingSearch();
             const query = String(q || "").trim();
-            if (!query && type !== "tag") return;
+            if (!query && type !== "tag") {
+                lastMatches = [];
+                lastCandidates = [];
+                updateDropdownOptions();
+                return;
+            }
             requestToken++;
             const token = requestToken;
             await runSearchNow(query, token);
@@ -1464,50 +1797,93 @@
 
         async function runSearchNow(q, token) {
             try {
-                const matches = await cfg.searchByName(q);
+                if (currentSearchController) {
+                    try {
+                        currentSearchController.abort();
+                    } catch {
+                        // ignore
+                    }
+                }
+                currentSearchController = new AbortController();
+                setSearching(true);
+
+                const matches = await cfg.searchByName(q, { signal: currentSearchController.signal });
                 if (token !== requestToken) return;
-                lastMatches = matches;
+
+                lastServerMatches = matches;
+                // Make narrowing feel instant: always apply a client-side filter too.
+                lastMatches = filterListByQuery(matches, q);
                 // Filter out items already on the scene.
                 const scene = await fetchScene(sceneId);
                 const existing = new Set(getEntitiesFromScene(scene, type).map((x) => String(x.id)));
-                const filtered = matches.filter((p) => !existing.has(String(p.id)));
+                const filtered = lastMatches.filter((p) => !existing.has(String(p.id)));
                 lastCandidates = filtered;
+                setSearching(false);
+
+                if (String(q || "").trim()) {
+                    if (lastCandidates.length) {
+                        setStatus(`${lastCandidates.length} match${lastCandidates.length === 1 ? "" : "es"}`);
+                    } else {
+                        setStatus("No matches");
+                    }
+                }
                 updateDropdownOptions();
             } catch (err) {
                 if (token !== requestToken) return;
+                if (err && (err.name === "AbortError" || String(err?.message || err).includes("aborted"))) {
+                    return;
+                }
                 console.error("[SceneCardPerformers] search failed", err);
                 showInlineError(panel.closest(`[${SCP_ROOT_ATTR}]`) || panel.parentElement || panel, String(err?.message || err));
                 lastCandidates = [];
+                setSearching(false);
                 updateDropdownOptions();
             }
         }
 
-        input.addEventListener("input", async (e) => {
+        function scheduleSearch(q) {
+            cancelPendingSearch();
+            requestToken++;
+            const token = requestToken;
+
+            const query = String(q || "").trim();
+            if (!query && type !== "tag") {
+                lastMatches = [];
+                lastCandidates = [];
+                lastServerMatches = [];
+                setStatus("");
+                closeDropdown();
+                return;
+            }
+
+            // Immediate local narrowing based on last server results (feels responsive).
+            if (query) {
+                lastMatches = filterListByQuery(lastServerMatches, query);
+                // Candidates will be filtered against scene on next server response; for now keep stale existing-filtering.
+                lastCandidates = filterListByQuery(lastCandidates, query);
+                updateDropdownOptions();
+            }
+
+            setSearching(true);
+            searchDebounceTimer = setTimeout(() => {
+                searchDebounceTimer = 0;
+                runSearchNow(query, token);
+            }, 220);
+        }
+
+        input.addEventListener("input", (e) => {
             stopCardNavigation(e);
             const q = String(input.value || "").trim();
             if (q === lastQuery) return;
             lastQuery = q;
 
-            requestToken++;
-            const token = requestToken;
-
-            if (!q) {
-                lastMatches = [];
-                lastCandidates = [];
-                closeDropdown();
-                if (type === "tag" && panel.dataset.open === "true") {
-                    // For tags, keep options populated even when blank.
-                    requestToken++;
-                    const token = requestToken;
-                    runSearchNow("", token);
-                }
+            if (!q && type === "tag" && panel.dataset.open === "true") {
+                // For tags, keep options populated even when blank.
+                scheduleSearch("");
                 return;
             }
 
-            // Debounce-ish (without setTimeout cancellation complexity).
-            await sleep(250);
-            if (token !== requestToken) return;
-            runSearchNow(q, token);
+            scheduleSearch(q);
         });
 
         input.addEventListener("keydown", async (e) => {
@@ -1543,18 +1919,17 @@
             try {
                 const query = String(input.value || "").trim();
 
-                // Users can press Enter before our debounced search finishes.
-                // Force a fresh search so we can resolve the name to an existing id
-                // and avoid duplicate creates.
-                await refreshCandidatesNow(query);
+                setStatus("Checking…");
 
-                // Enter should only submit exact matches (or an explicitly clicked dropdown item).
-                // This prevents accidentally adding a stale/closest suggestion when the typed text
-                // doesn't match any existing entity.
-                const didSubmit = await trySubmitFromQuery(query, { allowSingleCandidate: false });
+                // Cancel any pending debounced search and resolve the intent safely.
+                cancelPendingSearch();
 
-                // If not an exact/unique match, treat Enter as "create + add".
-                if (!didSubmit && query) {
+                // Always prefer an exact match lookup before creating.
+                const exact = await findExactMatchRemote(query);
+                if (exact?.id) {
+                    setStatus("Linking…");
+                    await addEntityById(exact.id);
+                } else if (query) {
                     await createAndAddByName(query);
                 }
 

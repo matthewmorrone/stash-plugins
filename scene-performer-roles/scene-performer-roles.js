@@ -56,8 +56,8 @@
                 font-size: 13px;
             }
 
-            [${ROOT_ATTR}][data-collapsed="true"] {
-                width: auto;
+            [${ROOT_ATTR}][data-dragging="true"] {
+                user-select: none;
             }
 
             [${ROOT_ATTR}] .sppd-header {
@@ -68,6 +68,8 @@
                 padding: 10px 10px;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.10);
                 background: rgba(30, 30, 30, 0.92);
+                cursor: move;
+                user-select: none;
             }
 
             [${ROOT_ATTR}] .sppd-title {
@@ -414,6 +416,10 @@
 
     function saveUiPrefs(prefs) {
         localStorage.setItem(UI_PREF_KEY, JSON.stringify(prefs));
+    }
+
+    function clamp(n, min, max) {
+        return Math.max(min, Math.min(max, n));
     }
 
     function getRolesForPair(store, sceneId, performerId) {
@@ -911,20 +917,94 @@
             void text;
         }
 
-        const prefs = loadUiPrefs();
-        const collapsedByDefault = prefs?.collapsed !== false;
-        if (collapsedByDefault) {
-            root.dataset.collapsed = "true";
-            btnCollapse.textContent = "+";
-            btnCollapse.title = "Expand";
-        }
-
-        btnCollapse.addEventListener("click", () => {
-            const next = root.dataset.collapsed !== "true";
+        function setCollapsed(collapsed, { persist } = {}) {
+            const next = !!collapsed;
             root.dataset.collapsed = next ? "true" : "false";
             btnCollapse.textContent = next ? "+" : "–";
             btnCollapse.title = next ? "Expand" : "Collapse";
-            saveUiPrefs({ ...loadUiPrefs(), collapsed: next });
+            if (persist !== false) saveUiPrefs({ ...loadUiPrefs(), collapsed: next });
+        }
+
+        function applySavedPosition() {
+            const prefs = loadUiPrefs();
+            const pos = prefs?.position;
+            if (!pos || typeof pos !== "object") return;
+            const left = Number(pos.left);
+            const top = Number(pos.top);
+            if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+
+            root.style.right = "auto";
+            root.style.bottom = "auto";
+            root.style.left = `${left}px`;
+            root.style.top = `${top}px`;
+
+            // Clamp inside viewport after layout.
+            requestAnimationFrame(() => {
+                const rect = root.getBoundingClientRect();
+                const maxLeft = Math.max(0, window.innerWidth - rect.width);
+                const maxTop = Math.max(0, window.innerHeight - rect.height);
+                const clampedLeft = clamp(left, 0, maxLeft);
+                const clampedTop = clamp(top, 0, maxTop);
+                root.style.left = `${clampedLeft}px`;
+                root.style.top = `${clampedTop}px`;
+            });
+        }
+
+        const prefs = loadUiPrefs();
+        const collapsedByDefault = prefs?.collapsed !== false;
+        if (collapsedByDefault) setCollapsed(true, { persist: false });
+
+        applySavedPosition();
+
+        btnCollapse.addEventListener("click", () => {
+            const next = root.dataset.collapsed !== "true";
+            setCollapsed(next);
+        });
+
+        // Drag to reposition panel (persisted).
+        header.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            const target = e.target;
+            if (target instanceof Element) {
+                if (target.closest("button, a, input, textarea, select, label")) return;
+            }
+
+            e.preventDefault();
+            root.dataset.dragging = "true";
+
+            const start = root.getBoundingClientRect();
+            const startLeft = start.left;
+            const startTop = start.top;
+            const startX = e.clientX;
+            const startY = e.clientY;
+
+            root.style.right = "auto";
+            root.style.bottom = "auto";
+            root.style.left = `${startLeft}px`;
+            root.style.top = `${startTop}px`;
+
+            header.setPointerCapture?.(e.pointerId);
+
+            const onMove = (ev) => {
+                const rect = root.getBoundingClientRect();
+                const maxLeft = Math.max(0, window.innerWidth - rect.width);
+                const maxTop = Math.max(0, window.innerHeight - rect.height);
+                const nextLeft = clamp(startLeft + (ev.clientX - startX), 0, maxLeft);
+                const nextTop = clamp(startTop + (ev.clientY - startY), 0, maxTop);
+                root.style.left = `${nextLeft}px`;
+                root.style.top = `${nextTop}px`;
+            };
+
+            const onUp = () => {
+                root.dataset.dragging = "false";
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", onUp);
+                const rect = root.getBoundingClientRect();
+                saveUiPrefs({ ...loadUiPrefs(), position: { left: rect.left, top: rect.top } });
+            };
+
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp, { once: true });
         });
 
         let exportToken = 0;
@@ -1068,7 +1148,7 @@
         btnImportMerge.addEventListener("click", () => importJson({ replace: false }));
         btnImportReplace.addEventListener("click", () => importJson({ replace: true }));
 
-        root.__sppd = { listEl: list, setStatus, titleEl: title };
+        root.__sppd = { listEl: list, setStatus, titleEl: title, setCollapsed };
         return root;
     }
 
@@ -1151,6 +1231,16 @@
 
         const root = createRoot();
         root.__sppd.setStatus("Loading performers…");
+
+        // If there's no saved data for this scene, default the panel to open.
+        try {
+            const store = loadStore();
+            const perScene = store?.scenes?.[sceneId];
+            const hasSceneData = perScene && typeof perScene === "object" && Object.keys(perScene).length > 0;
+            if (!hasSceneData) root.__sppd.setCollapsed(false, { persist: false });
+        } catch {
+            // Ignore store errors.
+        }
 
         try {
             const scene = await fetchSceneData(sceneId);

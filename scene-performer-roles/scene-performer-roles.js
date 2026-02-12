@@ -15,6 +15,11 @@
     const ROLE_TOP = "top";
     const ROLE_BOTTOM = "bottom";
     const ROLE_BOTH = "both";
+
+    // Gate for experimental CSS-drawn role icons.
+    // false: use Unicode glyphs (recommended)
+    // true: draw triangles via CSS ::before/::after
+    const USE_CSS_ICONS = false;
     const ROLE_ORDER = [ROLE_TOP, ROLE_BOTTOM];
     const ROLE_UI_ORDER = [ROLE_TOP, ROLE_BOTH, ROLE_BOTTOM];
     const ROLE_LABEL = {
@@ -201,11 +206,15 @@
                 width: 24px;
                 height: 24px;
                 padding: 0;
-                font-size: 12px;
+                font-size: ${USE_CSS_ICONS ? 0 : 12}px;
                 font-weight: 700;
                 line-height: 1;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
                 cursor: pointer;
                 opacity: 0.75;
+                position: relative;
             }
 
             [${ROOT_ATTR}] .spr-panel-role-btn[data-active="true"] {
@@ -237,7 +246,7 @@
                 width: 20px;
                 height: 20px;
                 padding: 0;
-                font-size: 11px;
+                font-size: ${USE_CSS_ICONS ? 0 : 11}px;
                 font-weight: 700;
                 line-height: 1;
                 display: inline-flex;
@@ -245,7 +254,84 @@
                 justify-content: center;
                 cursor: pointer;
                 opacity: 0.75;
+                position: relative;
             }
+
+            ${USE_CSS_ICONS ? `
+            /* CSS-drawn role icons (triangles) */
+            [${ROOT_ATTR}] .spr-panel-role-btn[data-role]::before,
+            .spr-role-btn[data-role]::before {
+                content: "";
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                width: 0;
+                height: 0;
+            }
+
+            /* Top: ▲ */
+            [${ROOT_ATTR}] .spr-panel-role-btn[data-role="top"]::before,
+            .spr-role-btn[data-role="top"]::before {
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-bottom: 8px solid currentColor;
+            }
+
+            /* Bottom: ▼ */
+            [${ROOT_ATTR}] .spr-panel-role-btn[data-role="bottom"]::before,
+            .spr-role-btn[data-role="bottom"]::before {
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 8px solid currentColor;
+            }
+
+            /* Both: ▲ + ▼ stacked */
+            [${ROOT_ATTR}] .spr-panel-role-btn[data-role="both"]::before,
+            .spr-role-btn[data-role="both"]::before {
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-bottom: 7px solid currentColor;
+                transform: translate(-50%, calc(-50% - 3px));
+            }
+
+            [${ROOT_ATTR}] .spr-panel-role-btn[data-role="both"]::after,
+            .spr-role-btn[data-role="both"]::after {
+                content: "";
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: 0;
+                height: 0;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 7px solid currentColor;
+                transform: translate(-50%, calc(-50% + 3px));
+            }
+
+            /* Slightly smaller icons for the smaller inline buttons */
+            .spr-role-btn[data-role="top"]::before,
+            .spr-role-btn[data-role="bottom"]::before {
+                border-left-width: 4px;
+                border-right-width: 4px;
+                border-top-width: 7px;
+                border-bottom-width: 7px;
+            }
+
+            .spr-role-btn[data-role="both"]::before {
+                border-left-width: 4px;
+                border-right-width: 4px;
+                border-bottom-width: 6px;
+                transform: translate(-50%, calc(-50% - 3px));
+            }
+
+            .spr-role-btn[data-role="both"]::after {
+                border-left-width: 4px;
+                border-right-width: 4px;
+                border-top-width: 6px;
+                transform: translate(-50%, calc(-50% + 3px));
+            }
+            ` : ""}
 
             .spr-role-btn:hover,
             .spr-role-btn:focus {

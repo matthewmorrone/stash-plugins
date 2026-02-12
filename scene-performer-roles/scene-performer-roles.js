@@ -612,11 +612,16 @@
         return data?.data;
     }
 
-    async function fetchScenePerformers(sceneId) {
+    async function fetchSceneData(sceneId) {
         const query = `
             query FindScene($id: ID!) {
                 findScene(id: $id) {
                     id
+                    title
+                    tags {
+                        id
+                        name
+                    }
                     performers {
                         id
                         name
@@ -624,9 +629,127 @@
                 }
             }
         `;
-        const data = await graphql(query, { id: sceneId });
-        const performers = data?.findScene?.performers || [];
-        return Array.isArray(performers) ? performers : [];
+
+        try {
+            const data = await graphql(query, { id: sceneId });
+            const scene = data?.findScene;
+            const performers = Array.isArray(scene?.performers) ? scene.performers : [];
+            const tags = Array.isArray(scene?.tags) ? scene.tags : [];
+            const title = typeof scene?.title === "string" ? scene.title : "";
+            return { performers, tags, title };
+        } catch {
+            // Older Stash schemas might not expose title/tags here.
+            const fallback = `
+                query FindScene($id: ID!) {
+                    findScene(id: $id) {
+                        id
+                        performers {
+                            id
+                            name
+                        }
+                    }
+                }
+            `;
+            const data = await graphql(fallback, { id: sceneId });
+            const performers = Array.isArray(data?.findScene?.performers) ? data.findScene.performers : [];
+            return { performers, tags: [], title: "" };
+        }
+    }
+
+    function shouldAutoFlipScene({ title, tags }) {
+        const t = String(title || "");
+        const titleHasFlip = /\bflip\b/i.test(t);
+        const tagHasFlip = Array.isArray(tags) && tags.some((tag) => String(tag?.name || "").trim().toLowerCase() === "flip");
+        return titleHasFlip || tagHasFlip;
+    }
+
+    function autoSetBothForTwoPerformersIfFlip({ sceneId, performers, title, tags }) {
+        if (!sceneId) return false;
+        if (!Array.isArray(performers) || performers.length !== 2) return false;
+        if (!shouldAutoFlipScene({ title, tags })) return false;
+
+        const store = loadStore();
+        const desired = new Set([ROLE_TOP, ROLE_BOTTOM]);
+        let changed = false;
+
+        for (const p of performers) {
+            const performerId = String(p?.id || "");
+            if (!performerId) continue;
+            const current = getRolesForPair(store, sceneId, performerId);
+            const alreadyBoth = current.has(ROLE_TOP) && current.has(ROLE_BOTTOM);
+            if (alreadyBoth) continue;
+            setRolesForPair(store, sceneId, performerId, desired);
+            changed = true;
+        }
+
+        if (!changed) return false;
+        saveStore(store);
+        return true;
+    }
+
+    async function mapLimit(items, limit, worker) {
+        const results = new Array(items.length);
+        const executing = new Set();
+
+        const max = Math.max(1, Number(limit) || 1);
+        for (let i = 0; i < items.length; i++) {
+            const p = Promise.resolve().then(() => worker(items[i], i));
+            results[i] = p;
+            executing.add(p);
+
+            const cleanup = () => executing.delete(p);
+            p.then(cleanup, cleanup);
+
+            if (executing.size >= max) await Promise.race(executing);
+        }
+        return Promise.all(results);
+    }
+
+    async function buildIdKeyedExportWithNames(store, { onProgress } = {}) {
+        const normalized = normalizeStore(store) || { scenes: {} };
+        const sceneIds = Object.keys(normalized.scenes || {});
+
+        const sceneMetaById = {};
+        await mapLimit(sceneIds, 4, async (sceneId, idx) => {
+            if (typeof onProgress === "function") onProgress(`Resolving names (${idx + 1}/${sceneIds.length})…`);
+            try {
+                sceneMetaById[sceneId] = await fetchSceneData(sceneId);
+            } catch {
+                sceneMetaById[sceneId] = { performers: [], tags: [], title: "" };
+            }
+        });
+
+        const outScenes = {};
+        for (const sceneId of sceneIds) {
+            const perScene = normalized.scenes?.[sceneId];
+            if (!perScene || typeof perScene !== "object") continue;
+
+            const meta = sceneMetaById?.[sceneId] || {};
+            const performerIdToName = new Map();
+            for (const p of Array.isArray(meta?.performers) ? meta.performers : []) {
+                const pid = String(p?.id || "");
+                if (!pid) continue;
+                performerIdToName.set(pid, String(p?.name || "").trim() || pid);
+            }
+
+            const outPerformers = {};
+            for (const [performerId, entry] of Object.entries(perScene)) {
+                const roles = normalizeRoleList(entry?.roles);
+                if (roles.length === 0) continue;
+                outPerformers[performerId] = {
+                    name: String(performerIdToName.get(String(performerId)) || "").trim() || "",
+                    roles,
+                };
+            }
+
+            if (Object.keys(outPerformers).length === 0) continue;
+            outScenes[sceneId] = {
+                title: String(meta?.title || "").trim() || "",
+                performers: outPerformers,
+            };
+        }
+
+        return { scenes: outScenes };
     }
 
     function createRoot() {
@@ -727,6 +850,26 @@
         const exportBox = document.createElement("div");
         exportBox.className = "sppd-export";
 
+        const exportModeLabel = document.createElement("label");
+        exportModeLabel.className = "sppd-btn";
+        exportModeLabel.style.display = "inline-flex";
+        exportModeLabel.style.alignItems = "center";
+        exportModeLabel.style.gap = "6px";
+        exportModeLabel.style.opacity = "0.75";
+        exportModeLabel.style.margin = "0";
+        exportModeLabel.style.marginBottom = "0";
+
+        const exportIncludeNames = document.createElement("input");
+        exportIncludeNames.type = "checkbox";
+        exportIncludeNames.checked = false;
+        exportIncludeNames.style.margin = "0";
+
+        const exportIncludeNamesText = document.createElement("span");
+        exportIncludeNamesText.textContent = "Include names";
+
+        exportModeLabel.appendChild(exportIncludeNames);
+        exportModeLabel.appendChild(exportIncludeNamesText);
+
         const exportText = document.createElement("textarea");
         exportText.className = "sppd-textarea";
         exportText.readOnly = true;
@@ -736,6 +879,7 @@
         exportActions.style.display = "flex";
         exportActions.style.gap = "6px";
         exportActions.style.marginTop = "8px";
+        exportActions.style.alignItems = "center";
 
         const btnExportCopy = document.createElement("button");
         btnExportCopy.type = "button";
@@ -749,6 +893,7 @@
 
         exportActions.appendChild(btnExportCopy);
         exportActions.appendChild(btnExportClose);
+        exportActions.appendChild(exportModeLabel);
 
         exportBox.appendChild(exportText);
         exportBox.appendChild(exportActions);
@@ -782,21 +927,56 @@
             saveUiPrefs({ ...loadUiPrefs(), collapsed: next });
         });
 
+        let exportToken = 0;
+        async function refreshExportText() {
+            const token = ++exportToken;
+            try {
+                const store = loadStore();
+                const includeNames = !!exportIncludeNames.checked;
+
+                if (!includeNames) {
+                    exportText.value = JSON.stringify(store, null, 2);
+                    exportText.focus();
+                    exportText.select();
+                    return;
+                }
+
+                exportText.value = "Resolving names…";
+                const enriched = await buildIdKeyedExportWithNames(store, {
+                    onProgress: (msg) => {
+                        if (token !== exportToken) return;
+                        exportText.value = String(msg || "Resolving names…");
+                    },
+                });
+                if (token !== exportToken) return;
+
+                exportText.value = JSON.stringify(enriched, null, 2);
+
+                exportText.focus();
+                exportText.select();
+            } catch (e) {
+                exportText.value = `Export failed: ${e?.message || e}`;
+            }
+        }
+
         btnExport.addEventListener("click", async () => {
             try {
                 root.dataset.importOpen = "false";
                 const next = root.dataset.exportOpen !== "true";
                 root.dataset.exportOpen = next ? "true" : "false";
-                if (!next) return;
+                if (!next) {
+                    exportToken++;
+                    return;
+                }
 
-                const store = loadStore();
-                exportText.value = JSON.stringify(store, null, 2);
-                exportText.focus();
-                exportText.select();
-                setStatus("Export ready. Copy from the box.");
+                await refreshExportText();
             } catch (e) {
                 setStatus(`Export failed: ${e?.message || e}`);
             }
+        });
+
+        exportIncludeNames.addEventListener("change", () => {
+            if (root.dataset.exportOpen === "true") refreshExportText();
         });
 
         btnImport.addEventListener("click", () => {
@@ -836,6 +1016,7 @@
 
         btnExportClose.addEventListener("click", () => {
             root.dataset.exportOpen = "false";
+            exportToken++;
         });
 
         function mergeStores(base, incoming) {
@@ -972,8 +1153,10 @@
         root.__sppd.setStatus("Loading performers…");
 
         try {
-            const performers = await fetchScenePerformers(sceneId);
+            const scene = await fetchSceneData(sceneId);
             if (token !== activeToken) return;
+            const performers = Array.isArray(scene?.performers) ? scene.performers : [];
+            autoSetBothForTwoPerformersIfFlip({ sceneId, performers, title: scene?.title, tags: scene?.tags });
             currentPerformers = performers;
             renderScene(sceneId, performers);
             decoratePerformerLinks(sceneId, performers);
